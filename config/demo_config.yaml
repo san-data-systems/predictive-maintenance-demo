@@ -1,0 +1,94 @@
+# ----------------------------------------------------------------------
+# Configuration for the AI-Driven Predictive Maintenance Demo
+# ----------------------------------------------------------------------
+
+# --- Global Settings ---
+# Used for dynamic naming in simulations if desired
+company_name_short: "DemoCorp"
+
+# --- IoT Sensor Simulator Settings ---
+iot_sensor_simulator:
+  # Asset ID is constructed in the simulator using this as a base
+  # e.g., DemoCorp_Turbine_007 from iot_sensor_simulator.py default
+  asset_id_prefix: "{company_name_short}_Turbine"
+  default_asset_number: 7 # e.g., for Turbine_007
+  data_interval_seconds: 2
+  # Baseline temperature used by sensor to calculate increase during anomaly
+  # This helps RAG system correlate temperature rise
+  base_temp_c: 42.0 # Should match the internal base_temp_c in TurbineSensor
+
+# --- Aruba Edge Simulator Settings ---
+aruba_edge_simulator:
+  # Device ID for the simulated edge device
+  device_id_template: "Edge_Sim_{company_name_short}_Node{id:03d}"
+  default_device_id_num: 1 # e.g., for Node001
+  
+  # API Endpoint where the PCAI Agent Application is listening
+  # The Edge Simulator will POST trigger data to this URL
+  pcai_agent_trigger_endpoint: "http://localhost:5000/api/v1/analyze_trigger"
+
+  # Thresholds for gross anomaly detection at the edge
+  thresholds:
+    temperature_critical_c: 55.0
+    # Amplitude of the specific anomaly signature (e.g., 121Hz peak)
+    vibration_anomaly_amp_g: 1.5 
+    acoustic_critical_band_db: 70.0
+
+  # OpsRamp endpoints the Edge Simulator will (simulated) call
+  opsramp:
+    # These are placeholders; actual API calls are simulated with print statements
+    metrics_endpoint: "SIMULATED_OPSRAMP_API/edge/metrics"
+    events_endpoint: "SIMULATED_OPSRAMP_API/edge/events"
+
+# --- PCAI Agent Application Settings ---
+pcai_app:
+  # Agent ID prefix, asset ID will be appended for specific OpsRamp logs
+  agent_id_prefix_template: "PCAI_Agent_{company_name_short}" # e.g., PCAI_Agent_DemoCorp
+  
+  # Network settings for the PCAI Flask/FastAPI application
+  listen_host: "0.0.0.0"  # Listen on all available network interfaces
+  listen_port: 5000       # Port for the PCAI app to listen on for triggers
+  
+  # Path to the RAG knowledge base files (relative to project root)
+  knowledge_base_path: "knowledge_base_files/"
+
+  # OpsRamp settings for PCAI agent's own diagnostic logging
+  opsramp:
+    # Placeholder; actual API calls are simulated
+    logs_endpoint: "SIMULATED_OPSRAMP_API/pcai/agent_logs"
+
+  # ServiceNow settings for creating work orders
+  servicenow:
+    # IMPORTANT: Replace with your actual ServiceNow developer instance URL
+    instance_url: "YOUR_SERVICENOW_DEV_INSTANCE.service-now.com"
+    # IMPORTANT: Replace with your ServiceNow API user
+    api_user: "YOUR_SN_API_USER"
+    # IMPORTANT: For actual deployment, use an environment variable for the password/token
+    # For this simulation, the connector uses a placeholder.
+    api_password_placeholder_comment: "Store actual password/token securely, e.g., in an ENV_VAR"
+    default_assignment_group: "Mechanical Maintenance Team" # As per demo plan
+    # Parts mentioned in demo plan
+    default_gear_part_number: "P/N G-5432"
+    default_bearing_part_number: "P/N B-8771"
+
+  # Settings for the diagnosis logic
+  diagnosis:
+    # Confidence score to assign for the primary demo path diagnosis
+    # This is fixed for the demo to ensure the narrative flow.
+    simulated_diagnosis_confidence: 0.92 # 92%
+
+# --- Knowledge Base Files Reminder ---
+# Ensure the following files exist in the 'knowledge_base_path' directory
+# and contain the specific text snippets that the RAG component (rag_components.py)
+# is designed to find for the demo narrative:
+# - technical_manual_extracts.txt
+# - turbine_repair_history_logs.txt
+# - expert_technician_notes.txt
+#
+# Example content snippets to include in your KB files:
+# In technical_manual_extracts.txt:
+#   "Section 7.3: High-frequency vibrations (115-125Hz) with harmonic sidebands often indicate early-stage gear tooth pitting."
+# In turbine_repair_history_logs.txt:
+#   "Turbine #004 (identical model) - Similar acoustic signature at 120Hz recorded 3 weeks prior to P/N G-5432 bearing assembly failure."
+# In expert_technician_notes.txt:
+#   "Analyst Note (Dr. Eva Rostova): For gearbox model GRX-II, correlate 120Hz vibration spikes with oil temperature. A rise >5°C suggests accelerated wear."

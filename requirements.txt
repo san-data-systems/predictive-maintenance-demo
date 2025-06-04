@@ -1,0 +1,16 @@
+# Core web framework for PCAI Agent Application
+Flask
+
+# For parsing YAML configuration files
+PyYAML
+
+# For making HTTP requests (will be used for actual API calls)
+# requests # Currently simulated, but good to have listed for next steps
+
+# --- Optional: For future enhancements or more complex scenarios ---
+# numpy # For advanced numerical operations
+# scikit-learn # For ML tasks, TF-IDF, etc.
+# sentence-transformers # For sentence embeddings in RAG
+# faiss-cpu # For local vector similarity search (CPU version)
+# torch # If using PyTorch based models
+# pandas # For extensive data manipulation

@@ -1,0 +1,41 @@
+Wind Turbine Generator - Model GRX-II - Operations & Maintenance Manual
+
+Document Version: 4.7.2
+Last Updated: 2024-01-15
+Manufacturer: AeroGen Dynamics Ltd.
+
+Chapter 1: Introduction
+1.1. Overview of the GRX-II Model
+The GRX-II is a direct-drive, variable speed wind turbine designed for high-efficiency power generation in moderate to high wind speed environments. Key components include the rotor assembly, nacelle, direct-drive permanent magnet generator, and the control system.
+
+1.2. Safety Precautions
+Always adhere to standard lockout/tagout procedures before performing any maintenance. Ensure all capacitors are discharged and the turbine is fully braked and secured. Refer to Safety Manual Doc ID: SM-GRX2-001 for complete details.
+
+Chapter 4: Nacelle Systems
+4.1. Gearbox Assembly (if applicable, older models)
+Note: The GRX-II primary model is direct-drive. For GRX-I legacy models with gearbox, refer to Appendix B.
+
+4.2. Yaw System
+The yaw system is responsible for orienting the nacelle towards the wind. Regular lubrication of yaw gears and inspection of yaw motor brushes is essential. Torque settings for yaw bolts: 350 Nm.
+
+Chapter 7: Troubleshooting Common Faults
+7.1. Blade Pitch Malfunctions
+Pitch errors can lead to reduced efficiency or overspeed conditions. Check hydraulic pressure (if applicable) or electrical actuator integrity. Error codes P010-P075 relate to pitch system faults.
+
+7.2. Generator Overheating
+Continuous operation above nominal temperature (85°C internal winding) can degrade insulation and reduce generator lifespan. Verify cooling system functionality (fan operation, coolant levels if liquid-cooled). Check for obstructed air vents.
+
+7.3. Vibration Analysis and Fault Signatures
+The GRX-II is equipped with multiple vibration sensors. Baseline vibration signatures should be established post-commissioning. Section 7.3: High-frequency vibrations (115-125Hz) with harmonic sidebands often indicate early-stage gear tooth pitting. This is particularly relevant for auxiliary systems or older non-direct-drive components that might still use planetary gears for other functions, or if analyzing external coupled machinery. For the main generator, which is direct-drive, such frequencies might indicate bearing race issues or specific electrical faults manifesting as mechanical vibrations.
+
+7.4. Electrical System Faults
+Refer to the Electrical Schematics Manual (Doc ID: ES-GRX2-003). Common issues include contacter failures, inverter faults, or cable degradation. Inverter fault codes INV001-INV050 provide specific diagnostic information.
+
+Appendix A: Lubrication Schedule
+- Main Bearing: AeroLube Synth 500 - Annually or 8000 operating hours.
+- Yaw Bearing: AeroGrease HTEP - Semi-annually.
+
+Appendix B: Legacy Gearbox Maintenance (GRX-I Model Only)
+B.1. Oil Analysis: Quarterly. Look for metal particles, water content.
+B.2. Gear Inspection: Annually. Check for pitting, spalling, wear.
+B.3. Bearing Replacement: As indicated by vibration analysis or oil condition. Typical lifespan 5-7 years under normal load.

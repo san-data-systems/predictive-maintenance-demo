@@ -1,0 +1,51 @@
+Turbine Maintenance & Repair Log - Master Record
+
+Asset ID: DemoCorp_Turbine_001
+Date: 2023-05-12
+Technician: J. Abernathy
+Work Order: WO2023050034
+Issue: Low power output reported by SCADA.
+Action: Investigated pitch system. Found hydraulic leak in actuator for Blade 2. Replaced seal kit (P/N PK-B2-009). Tested. Output normal.
+Hours: 6
+
+Asset ID: DemoCorp_Turbine_007
+Date: 2023-07-20
+Technician: S. Lee
+Work Order: WO2023070112
+Issue: Routine 6-month inspection.
+Action: All checks normal. Lubricated yaw bearing. Cleaned nacelle air filters. No anomalies noted.
+Hours: 4
+
+Asset ID: DemoCorp_Turbine_004 (identical model to DemoCorp_Turbine_007)
+Date: 2024-02-10
+Technician: M. Valerius
+Work Order: WO2024020015
+Issue: Intermittent high vibration alerts from nacelle sensor VIB-N-02 (rear generator bearing). Asset continued operation with monitoring.
+Action: Scheduled detailed inspection.
+Hours: 1
+
+Asset ID: DemoCorp_Turbine_004 (identical model to DemoCorp_Turbine_007)
+Date: 2024-03-03
+Technician: M. Valerius, R. Costa
+Work Order: WO2024030002 (Follow-up to WO2024020015)
+Issue: Critical vibration and increasing temperature at rear generator bearing. Turbine taken offline. Similar acoustic signature at 120Hz recorded 3 weeks prior to P/N G-5432 bearing assembly failure.
+Action: Disassembled rear generator section. Found catastrophic failure of bearing P/N G-5432. Significant scoring on shaft. Replaced bearing assembly (P/N G-5432), performed minor shaft polishing. Oil flush and replacement.
+Parts Used: G-5432 (Bearing Assembly), AeroLube Synth 500 (Oil)
+Hours: 24 (2 technicians)
+Notes: Recommend reviewing vibration thresholds for 120Hz band on similar GRX-II units. This specific acoustic pattern was a clear precursor.
+
+Asset ID: DemoCorp_Turbine_007
+Date: 2024-08-01
+Technician: P. Jones
+Work Order: WO2024080005
+Issue: Annual main bearing lubrication.
+Action: Main bearing lubricated with AeroLube Synth 500. Old grease samples taken for analysis - results pending. All other checks nominal.
+Hours: 5
+
+Asset ID: DemoCorp_Turbine_002
+Date: 2024-11-15
+Technician: J. Abernathy
+Work Order: WO2024110078
+Issue: Inverter fault INV023 - IGBT module failure.
+Action: Replaced IGBT module (P/N IGBT-M4). Reset inverter. Tested under load. OK.
+Hours: 3

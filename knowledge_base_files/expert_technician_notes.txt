@@ -1,0 +1,26 @@
+Expert Technician Field Notes & Best Practices - Compiled by Lead Engineering Team
+
+Lead Engineer: Dr. Eva Rostova
+Date Compiled: 2024-03-20
+
+General Observations:
+- Always cross-reference SCADA data with physical inspection findings. Anomalies can sometimes be sensor faults rather than mechanical issues.
+- Pay attention to changes over time (trends) in vibration, temperature, and oil quality, not just absolute threshold breaches. Early detection is key.
+
+GRX-II Model Specific Notes:
+1. Main Bearing Wear: The GRX-II main bearing is generally robust. However, inadequate lubrication or contamination can lead to premature wear. Look for an increase in low-frequency (1-10Hz) vibration components. An increase in overall RMS vibration without a clear spectral peak can also indicate distributed wear.
+
+2. Yaw System Misalignment: If yaw error exceeds 5 degrees 평균 (avg) over an hour, it can induce significant stress on the drivetrain and blades. Check yaw brake pressures and sensor calibration.
+
+3. Direct-Drive Generator Nuances: While eliminating the gearbox simplifies things, the large diameter permanent magnet generator has its own failure modes. Thermal cycling can affect magnet bonding over many years. Stator winding insulation degradation is primarily temperature-driven. Analyst Note (Dr. Eva Rostova): For gearbox model GRX-II, correlate 120Hz vibration spikes with oil temperature. A rise >5°C suggests accelerated wear. (Note: This advice about "gearbox model GRX-II" is a slight misnomer, as GRX-II is primarily direct drive, but this could refer to auxiliary systems or be a note carried over from GRX-I experience that operators still find relevant for certain components if they exhibit similar frequencies due to bearings etc. The core part is the 120Hz + temp correlation).
+
+4. Blade Imbalance or Damage: Minor leading-edge erosion is common, but significant damage or imbalance will manifest as 1P (rotor speed) and 2P/3P vibrations. Use strobe inspection during slow rotation if suspected.
+
+5. Inverter Cooling Fans: These small components are critical. A failed inverter cooling fan (often a simple NTC thermistor reports high temp) can lead to a full shutdown. Regularly check fan operation and replace noisy units proactively. Part number for fan: FAN-INV-24V.
+
+6. Acoustic Signatures: Experienced technicians can often identify developing issues by changes in the turbine's sound. For GRX-II, a distinct high-pitched whine developing around the 1-2kHz range, especially if correlated with generator load, might indicate an early electrical issue in the stator or inverter switching harmonics. A rumbling sound from the main bearing is a late-stage indicator.
+
+7. Oil Particle Analysis: For any oil-lubricated systems (e.g., hydraulic pitch system, legacy components), particle count and elemental analysis are invaluable. High copper might indicate bushing wear, while iron could be gears or bearings. Silicon often points to dirt ingress (check seals).
+
+Maintenance Strategy Note (K. Singh, Ops Manager):
+- We are transitioning towards more condition-based maintenance intervals, leveraging sensor data and these AI diagnostic tools. Calendar-based tasks will remain for safety-critical items and consumables.

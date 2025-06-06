@@ -102,8 +102,15 @@ Set Up Ollama: Install Ollama and pull the required model as shown in the prereq
 Set ServiceNow Environment Variables:
 In your terminal, set the environment variables that the Python app will use to authenticate with ServiceNow.
 
+On macOS/Linux:
+
 export SERVICENOW_API_USER="your_sn_username"
 export SERVICENOW_API_PASSWORD="your_sn_password"
+
+On Windows (Command Prompt):
+
+set SERVICENOW_API_USER="your_sn_username"
+set SERVICENOW_API_PASSWORD="your_sn_password"
 
 Configure the Demo:
 
@@ -165,7 +172,7 @@ kubectl create secret generic pcai-app-credentials \
   -n pred-maint-demo
 
 Apply the Application Stack using Kustomize:
-This command deploys everything defined in the base directory.
+This command deploys everything defined in the base directory into the pred-maint-demo namespace.
 
 kubectl apply -k kubernetes/base/
 
@@ -230,7 +237,3 @@ Phase 5: Closed-Loop Confirmation: The newly created ticket is shown in the Serv
 Technical Decision Makers (CTOs, VPs of IT/Engineering)
 
 IT/OT (Operational Technology) Managers
-
-Innovation Leaders and Digital Transformation Officers
-
-Attendees at events like HPE Discover, industry conferences, and strategic customer briefings.

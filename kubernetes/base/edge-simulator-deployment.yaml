@@ -3,11 +3,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: edge-simulator
-  # namespace: pred-maint-demo # If using a namespace, uncomment this
   labels:
     app: edge-simulator
 spec:
-  replicas: 1 # We only need one instance of the simulator
+  replicas: 1
   selector:
     matchLabels:
       app: edge-simulator
@@ -18,10 +17,15 @@ spec:
     spec:
       containers:
       - name: edge-simulator-app
-        # IMPORTANT: Replace with your actual image from your container registry
-        image: sdsajoshi/edge-simulator-app:latest
+        image: sdsajoshi/edge-simulator-app:latest # IMPORTANT: Replace with your actual image
+        # --- MODIFICATION: Added CPU and Memory resources ---
+        resources:
+          requests:
+            cpu: "100m" # 0.1 of a CPU core
+            memory: "128Mi"
+          limits:
+            cpu: "500m" # 0.5 of a CPU core
+            memory: "256Mi"
         env:
-        # This environment variable sets the target for the edge simulator's
-        # HTTP calls. It points to the Kubernetes service of the PCAI app.
         - name: PCAI_AGENT_TRIGGER_ENDPOINT
           value: "http://pcai-app-service:5000/api/v1/analyze_trigger"

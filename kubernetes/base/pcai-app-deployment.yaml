@@ -3,7 +3,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: pcai-app
-  # namespace: pred-maint-demo
   labels:
     app: pcai-app
 spec:
@@ -18,30 +17,32 @@ spec:
     spec:
       containers:
       - name: pcai-app
-        # IMPORTANT: Replace with the actual image you built and pushed
-        image: sdsajoshi/pcai-app:latest
+        image: sdsajoshi/pcai-app:latest # IMPORTANT: Replace with your actual image
         ports:
         - containerPort: 5000
-        # Inject ServiceNow credentials from the K8s Secret into the container as environment variables
+        # --- MODIFICATION: Added CPU and Memory resources ---
+        resources:
+          requests:
+            cpu: "250m" # 0.25 of a CPU core
+            memory: "512Mi" # 512 Mebibytes
+          limits:
+            cpu: "1" # 1 full CPU core
+            memory: "1Gi" # 1 Gibibyte
         envFrom:
         - secretRef:
-            name: pcai-app-credentials # Must match the name of the Secret you create
-        # Mount the config file and knowledge base files from the ConfigMap
+            name: pcai-app-credentials
         volumeMounts:
         - name: config-volume
-          mountPath: /app/config # Mounts demo_config.yaml into /app/config/
+          mountPath: /app/config
         - name: kb-volume
-          mountPath: /app/knowledge_base_files # Mounts the KB files here
-      # Define the volumes that are sourced from the ConfigMap
+          mountPath: /app/knowledge_base_files
       volumes:
       - name: config-volume
         configMap:
-          name: pcai-app-config # References our ConfigMap
+          name: pcai-app-config
           items:
             - key: demo_config.yaml
               path: demo_config.yaml
       - name: kb-volume
         configMap:
           name: pcai-app-config
-          # This mounts each key from the ConfigMap as a file in the directory
-          # No need to list items if you want all keys mounted

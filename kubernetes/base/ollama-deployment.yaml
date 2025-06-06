@@ -3,7 +3,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ollama
-  # namespace: pred-maint-demo
   labels:
     app: ollama
 spec:
@@ -17,14 +16,12 @@ spec:
         app: ollama
     spec:
       containers:
-      # Optional: Init container to pre-pull the model on startup
       - name: ollama-pull-model-init
         image: ollama/ollama:latest
-        command: ["ollama", "pull", "llama3:8b"] # Your specific model
+        command: ["ollama", "pull", "llama3:8b"]
         volumeMounts:
         - name: ollama-models-storage
           mountPath: /root/.ollama
-      # The main Ollama server container
       - name: ollama
         image: ollama/ollama:latest
         ports:
@@ -32,13 +29,19 @@ spec:
         volumeMounts:
         - name: ollama-models-storage
           mountPath: /root/.ollama
-        # CRITICAL: This section requests a GPU from the Kubernetes scheduler.
-        # Your cluster MUST have the NVIDIA device plugin or operator installed for this to work.
+        # --- MODIFICATION: Added CPU and Memory resources ---
         resources:
-          limits:
-            nvidia.com/gpu: 1
           requests:
-            nvidia.com/gpu: 1
+            # Requesting significant CPU and RAM as LLM serving can be demanding
+            # even outside the GPU.
+            cpu: "1"
+            memory: "8Gi"
+            nvidia.com/gpu: 1 # GPU Request
+          limits:
+            # Setting generous limits to avoid being killed under load
+            cpu: "4"
+            memory: "16Gi"
+            nvidia.com/gpu: 1 # GPU Limit
       volumes:
       - name: ollama-models-storage
         persistentVolumeClaim:

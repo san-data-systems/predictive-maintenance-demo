@@ -1,0 +1,27 @@
+# kubernetes/base/edge-simulator-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edge-simulator
+  # namespace: pred-maint-demo # If using a namespace, uncomment this
+  labels:
+    app: edge-simulator
+spec:
+  replicas: 1 # We only need one instance of the simulator
+  selector:
+    matchLabels:
+      app: edge-simulator
+  template:
+    metadata:
+      labels:
+        app: edge-simulator
+    spec:
+      containers:
+      - name: edge-simulator-app
+        # IMPORTANT: Replace with your actual image from your container registry
+        image: sdsajoshi/edge-simulator-app:latest
+        env:
+        # This environment variable sets the target for the edge simulator's
+        # HTTP calls. It points to the Kubernetes service of the PCAI app.
+        - name: PCAI_AGENT_TRIGGER_ENDPOINT
+          value: "http://pcai-app-service:5000/api/v1/analyze_trigger"

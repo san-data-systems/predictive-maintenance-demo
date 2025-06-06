@@ -1,0 +1,47 @@
+# kubernetes/base/pcai-app-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pcai-app
+  # namespace: pred-maint-demo
+  labels:
+    app: pcai-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pcai-app
+  template:
+    metadata:
+      labels:
+        app: pcai-app
+    spec:
+      containers:
+      - name: pcai-app
+        # IMPORTANT: Replace with the actual image you built and pushed
+        image: sdsajoshi/pcai-app:latest
+        ports:
+        - containerPort: 5000
+        # Inject ServiceNow credentials from the K8s Secret into the container as environment variables
+        envFrom:
+        - secretRef:
+            name: pcai-app-credentials # Must match the name of the Secret you create
+        # Mount the config file and knowledge base files from the ConfigMap
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config # Mounts demo_config.yaml into /app/config/
+        - name: kb-volume
+          mountPath: /app/knowledge_base_files # Mounts the KB files here
+      # Define the volumes that are sourced from the ConfigMap
+      volumes:
+      - name: config-volume
+        configMap:
+          name: pcai-app-config # References our ConfigMap
+          items:
+            - key: demo_config.yaml
+              path: demo_config.yaml
+      - name: kb-volume
+        configMap:
+          name: pcai-app-config
+          # This mounts each key from the ConfigMap as a file in the directory
+          # No need to list items if you want all keys mounted

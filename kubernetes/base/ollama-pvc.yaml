@@ -1,0 +1,17 @@
+# kubernetes/base/ollama-pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-models-pvc
+  # namespace: pred-maint-demo # Uncomment if you're using a namespace
+spec:
+  # This access mode is suitable for a single Ollama pod.
+  accessModes:
+    - ReadWriteOnce
+  # Your K8s cluster needs to be able to provision a volume of this size.
+  # Adjust size based on how many models you plan to store.
+  resources:
+    requests:
+      storage: 20Gi
+  # Optional: specify a storageClassName if your cluster has them defined.
+  # storageClassName: standard-rwx

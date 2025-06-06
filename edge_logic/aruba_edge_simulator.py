@@ -3,22 +3,17 @@
 import json
 import time
 import os
-import requests # For making actual HTTP requests
+import requests 
 
-# Import utilities
 from utilities import get_utc_timestamp, load_app_config, get_full_config
-
 from data_simulators.iot_sensor_simulator import TurbineSensor
-
-# REMOVED: from .api_connector import OpsRampConnector, ServiceNowConnector, OllamaConnector 
-# This line was incorrect as these connectors belong to pcai_app
 
 class ArubaEdgeSimulator:
     """
     Simulates an Aruba Edge device that processes sensor data,
     detects gross anomalies, and sends alerts/triggers via actual HTTP calls.
     """
-    def __init__(self): # config_path removed, utility will find default
+    def __init__(self):
         self.config = load_app_config('aruba_edge_simulator')
         if not self.config:
             print("FATAL ERROR: ArubaEdgeSimulator FAILED to load 'aruba_edge_simulator' configuration section. Cannot proceed.")
@@ -46,22 +41,21 @@ class ArubaEdgeSimulator:
         self.opsramp_metrics_endpoint = opsramp_cfg.get('metrics_endpoint', "FALLBACK_OPSRAMP_METRICS_ENDPOINT")
         self.opsramp_events_endpoint = opsramp_cfg.get('events_endpoint', "FALLBACK_OPSRAMP_EVENTS_ENDPOINT")
         
-        self.pcai_trigger_endpoint = self.config.get('pcai_agent_trigger_endpoint')
+        self.pcai_trigger_endpoint = os.environ.get(
+            'PCAI_AGENT_TRIGGER_ENDPOINT', 
+            self.config.get('pcai_agent_trigger_endpoint')
+        )
+
         if not self.pcai_trigger_endpoint:
-            error_msg = "Missing 'pcai_agent_trigger_endpoint' in 'aruba_edge_simulator' config."
+            error_msg = "Missing 'pcai_agent_trigger_endpoint' in config and 'PCAI_AGENT_TRIGGER_ENDPOINT' environment variable not set."
             print(f"FATAL ERROR: {error_msg}")
             raise KeyError(error_msg)
 
-        print(f"INFO: [{self.device_id}] Aruba Edge Simulator initialized using common_utils.")
-        print(f"INFO: [{self.device_id}] Thresholds: {self.thresholds}")
-        print(f"INFO: [{self.device_id}] OpsRamp Metrics Endpoint (Simulated): {self.opsramp_metrics_endpoint}")
-        print(f"INFO: [{self.device_id}] OpsRamp Events Endpoint (Simulated): {self.opsramp_events_endpoint}")
+        print(f"INFO: [{self.device_id}] Aruba Edge Simulator initialized.")
         print(f"INFO: [{self.device_id}] PCAI Trigger Endpoint (Actual HTTP): {self.pcai_trigger_endpoint}")
 
+
     def _make_actual_api_call(self, endpoint: str, payload: dict, method: str = "POST"):
-        """
-        Makes an actual HTTP API call using the 'requests' library.
-        """
         print(f"\n--- MAKING ACTUAL HTTP API CALL [{method}] ---")
         print(f"To Endpoint: {endpoint}")
         print(f"Payload:\n{json.dumps(payload, indent=2)}")
@@ -69,7 +63,6 @@ class ArubaEdgeSimulator:
         response_summary = {"status": "error", "message": "Call not attempted or unknown error"}
         try:
             if method.upper() == "POST":
-                # Increased timeout significantly for PCAI app + LLM processing
                 response = requests.post(endpoint, json=payload, timeout=300) 
             elif method.upper() == "GET":
                 response = requests.get(endpoint, params=payload, timeout=300)
@@ -77,7 +70,6 @@ class ArubaEdgeSimulator:
                 print(f"ERROR: Unsupported HTTP method '{method}' for API call.")
                 response_summary = {"status": "error", "message": f"Unsupported HTTP method: {method}"}
                 return response_summary
-
             response.raise_for_status() 
             
             print(f"SUCCESS: API Call to {endpoint} successful. Status: {response.status_code}")
@@ -85,7 +77,6 @@ class ArubaEdgeSimulator:
                 response_summary = {"status": "success", "response_data": response.json(), "status_code": response.status_code}
             except requests.exceptions.JSONDecodeError: 
                 response_summary = {"status": "success", "response_data": response.text, "status_code": response.status_code}
-
         except requests.exceptions.ConnectionError as e:
             print(f"ERROR: API Call ConnectionError to {endpoint}: {e}")
             response_summary = {"status": "error", "message": f"Connection error to {endpoint}: {e}"}
@@ -100,13 +91,12 @@ class ArubaEdgeSimulator:
             response_summary = {"status": "error", "message": f"General request error for {endpoint}: {e}"}
         finally:
             print(f"--- END ACTUAL HTTP API CALL (Status: {response_summary.get('status')}) ---")
-        
         return response_summary
 
     def _send_metrics_to_opsramp(self, sensor_data: dict):
         metrics_payload = {
             "source_device_id": self.device_id,
-            "asset_id": sensor_data["asset_id"],
+            "asset_id": sensor_data["asset_id"], 
             "timestamp": sensor_data["timestamp"], 
             "metrics": {
                 "temperature_c": sensor_data["temperature_c"],
@@ -120,7 +110,6 @@ class ArubaEdgeSimulator:
         if sensor_data.get("vibration_anomaly_signature_freq_hz") is not None:
             metrics_payload["metrics"]["vibration_anomaly_signature_freq_hz"] = sensor_data["vibration_anomaly_signature_freq_hz"]
             metrics_payload["metrics"]["vibration_anomaly_signature_amp_g"] = sensor_data["vibration_anomaly_signature_amp_g"]
-
         print(f"\n--- SIMULATING API CALL [POST] (OpsRamp Metrics) ---")
         print(f"To Endpoint: {self.opsramp_metrics_endpoint}")
         print(f"Payload:\n{json.dumps(metrics_payload, indent=2)}")
@@ -179,10 +168,8 @@ class ArubaEdgeSimulator:
         }
         print(f"INFO: [{self.device_id}] Preparing to send Anomaly Trigger to PCAI for {sensor_data['asset_id']}")
         api_call_result = self._make_actual_api_call(self.pcai_trigger_endpoint, pcai_trigger_payload, method="POST")
-        
         if api_call_result and api_call_result.get("status") == "success":
             print(f"INFO: [{self.device_id}] Successfully sent trigger to PCAI. Response status: {api_call_result.get('status_code')}")
-            # Optionally log response_data from PCAI if needed: print(api_call_result.get("response_data"))
         else:
             print(f"WARN: [{self.device_id}] Failed to send trigger to PCAI or received error. Details: {api_call_result}")
 
@@ -199,8 +186,8 @@ class ArubaEdgeSimulator:
         else:
             print(f"INFO: [{self.device_id}] Data for {sensor_data['asset_id']} within normal edge parameters.")
 
+# --- NEW INDEFINITE SIMULATION LOGIC ---
 if __name__ == "__main__":
-    DEFAULT_CONFIG_PATH = "config/demo_config.yaml" 
     sensor_asset_id = "Default_Sensor_Asset_000_EdgeMain"
     sensor_data_interval = 2
     sensor_base_temp = 42.0
@@ -211,10 +198,12 @@ if __name__ == "__main__":
         if full_cfg_main:
             iot_sim_cfg_main = full_cfg_main.get('iot_sensor_simulator', {})
             company_name_main = full_cfg_main.get('company_name_short', 'TestCo')
+            
             asset_prefix_template_main = iot_sim_cfg_main.get('asset_id_prefix', "{company_name_short}_Turbine")
             asset_prefix_main = asset_prefix_template_main.format(company_name_short=company_name_main)
             asset_num_main = iot_sim_cfg_main.get('default_asset_number', 7)
             sensor_asset_id = f"{asset_prefix_main}_{asset_num_main:03d}"
+            
             sensor_data_interval = iot_sim_cfg_main.get('data_interval_seconds', sensor_data_interval)
             sensor_base_temp = iot_sim_cfg_main.get('base_temp_c', sensor_base_temp)
             print(f"INFO: [EdgeSim __main__] Loaded IoT sensor settings using common_utils for {sensor_asset_id}.")
@@ -224,23 +213,36 @@ if __name__ == "__main__":
         edge_sim = ArubaEdgeSimulator() 
         sensor = TurbineSensor(asset_id=sensor_asset_id, base_temp_c_from_config=sensor_base_temp)
 
-        print(f"\n--- Starting Edge Simulation Test with IoT Sensor: {sensor.asset_id} ---")
+        print(f"\n--- Starting INDEFINITE Edge Simulation with IoT Sensor: {sensor.asset_id} ---")
         print(f"--- Edge will make ACTUAL HTTP calls to PCAI endpoint: {edge_sim.pcai_trigger_endpoint} ---")
-        print(f"--- Data interval: {sensor_data_interval}s. Ctrl+C to stop. ---")
-        print("--- Simulating: 5 normal, 10 anomalous, 5 normal. ---")
+        print(f"--- Data interval: {sensor_data_interval}s. Anomaly will toggle on/off. Press Ctrl+C to stop. ---")
+        
+        iteration_count = 0
+        is_currently_anomalous = False
+        # Define how long each period of normal/anomalous data should last
+        NORMAL_CYCLES = 15
+        ANOMALY_CYCLES = 20 # Run anomaly for a bit longer to ensure it's triggered/seen
 
-        for i in range(20): 
-            print(f"\n--- Cycle {i+1}/20 ---")
-            if i == 5: 
-                print("\nDEMO OPERATOR ACTION: Injecting anomaly into sensor...\n")
-                sensor.set_anomaly_status(True)
-            elif i == 15: 
-                print("\nDEMO OPERATOR ACTION: Reverting anomaly in sensor...\n")
+        while True:
+            cycle_in_period = iteration_count % (NORMAL_CYCLES + ANOMALY_CYCLES)
+
+            # Check if we should switch state
+            if cycle_in_period == 0 and is_currently_anomalous:
+                print("\nDEMO OPERATOR ACTION: Reverting anomaly in sensor (end of period)...\n")
                 sensor.set_anomaly_status(False)
+                is_currently_anomalous = False
+            elif cycle_in_period == NORMAL_CYCLES and not is_currently_anomalous:
+                print("\nDEMO OPERATOR ACTION: Injecting anomaly into sensor (start of period)...\n")
+                sensor.set_anomaly_status(True)
+                is_currently_anomalous = True
 
+            print(f"\n--- Cycle {iteration_count + 1} (Period Cycle: {cycle_in_period + 1}, Anomaly State: {is_currently_anomalous}) ---")
+            
             current_sensor_data = sensor.generate_data()
             print(f"SENSOR ({sensor.asset_id}) generated: {json.dumps(current_sensor_data, indent=2)}")
             edge_sim.process_sensor_data(current_sensor_data)
+            
+            iteration_count += 1
             time.sleep(sensor_data_interval)
 
     except (ValueError, KeyError) as e_conf: 

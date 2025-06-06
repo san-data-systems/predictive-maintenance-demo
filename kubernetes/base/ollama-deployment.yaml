@@ -1,0 +1,45 @@
+# kubernetes/base/ollama-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  # namespace: pred-maint-demo
+  labels:
+    app: ollama
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      containers:
+      # Optional: Init container to pre-pull the model on startup
+      - name: ollama-pull-model-init
+        image: ollama/ollama:latest
+        command: ["ollama", "pull", "llama3:8b"] # Your specific model
+        volumeMounts:
+        - name: ollama-models-storage
+          mountPath: /root/.ollama
+      # The main Ollama server container
+      - name: ollama
+        image: ollama/ollama:latest
+        ports:
+        - containerPort: 11434
+        volumeMounts:
+        - name: ollama-models-storage
+          mountPath: /root/.ollama
+        # CRITICAL: This section requests a GPU from the Kubernetes scheduler.
+        # Your cluster MUST have the NVIDIA device plugin or operator installed for this to work.
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+          requests:
+            nvidia.com/gpu: 1
+      volumes:
+      - name: ollama-models-storage
+        persistentVolumeClaim:
+          claimName: ollama-models-pvc

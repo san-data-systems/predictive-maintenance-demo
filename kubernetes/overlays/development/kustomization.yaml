@@ -1,0 +1,17 @@
+# kubernetes/overlays/development/kustomization.yaml
+#
+# This file defines the 'development' environment overlay.
+# It inherits all resources from the base and can apply development-specific patches.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Point to the base configuration directory
+# --- Optional Examples of Patches for 'development' ---
+# You can uncomment and modify these later as needed.
+# Example 1: Use a specific image tag for development builds
+# images:
+#   - name: your-registry/pcai-app
+#     newTag: dev-v1.2.3
+#   - name: your-registry/edge-simulator-app
+#     newTag: dev-v1.2.3
+resources:
+- ../../base

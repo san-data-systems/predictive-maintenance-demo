@@ -1,0 +1,31 @@
+# kubernetes/base/kustomization.yaml
+#
+# This file defines the "base" layer of your application for Kustomize.
+# It lists all the common resources needed to run the demo.
+# You can apply this base directly using `kubectl apply -k .` from this directory.
+apiVersion: kustomize.config.k8s.io/v1beta1
+# Optional: You can apply a common namespace to all resources defined here.
+# Uncomment the line below to have everything deployed into the 'pred-maint-demo' namespace.
+# Make sure 'namespace.yaml' is also in the resources list.
+# namespace: pred-maint-demo
+kind: Kustomization
+# Optional: Apply common labels to every resource for easy identification and selection.
+# The list of resource manifest files to include in the base.
+# The order is for readability; Kubernetes will manage creation dependencies.
+  # Ollama LLM Server Components (with GPU support)
+  # PCAI Application Components
+  # Note: secrets are created manually with kubectl, not listed here.
+resources:
+- namespace.yaml
+- ollama-pvc.yaml
+- ollama-deployment.yaml
+- ollama-service.yaml
+- pcai-app-configmap.yaml
+- pcai-app-deployment.yaml
+- pcai-app-service.yaml
+- edge-simulator-deployment.yaml
+labels:
+- includeSelectors: true
+  pairs:
+    app.kubernetes.io/name: pred-maint-demo
+    app.kubernetes.io/part-of: hpe-ai-demo

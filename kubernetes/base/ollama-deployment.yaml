@@ -13,35 +13,36 @@ spec:
   template:
     metadata:
       labels:
+        # These labels must match the selector in ollama-service.yaml
         app: ollama
     spec:
       containers:
-      - name: ollama-pull-model-init
-        image: ollama/ollama:latest
-        command: ["ollama", "pull", "llama3:8b"]
-        volumeMounts:
-        - name: ollama-models-storage
-          mountPath: /root/.ollama
       - name: ollama
         image: ollama/ollama:latest
+        # --- MODIFICATION: Override container command to pull model then serve ---
+        # This ensures the model is available before the server starts accepting connections.
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            echo "Ollama container starting..."
+            echo "Attempting to pull model 'llama3:8b'. This may take a few minutes on first run..."
+            ollama pull llama3:8b
+            echo "Model pull complete."
+            echo "Starting Ollama server..."
+            ollama serve
+        # --- END MODIFICATION ---
         ports:
         - containerPort: 11434
         volumeMounts:
         - name: ollama-models-storage
           mountPath: /root/.ollama
-        # --- MODIFICATION: Added CPU and Memory resources ---
         resources:
+          limits:
+            nvidia.com/gpu: 1
           requests:
-            # Requesting significant CPU and RAM as LLM serving can be demanding
-            # even outside the GPU.
+            nvidia.com/gpu: 1
             cpu: "1"
             memory: "8Gi"
-            nvidia.com/gpu: 1 # GPU Request
-          limits:
-            # Setting generous limits to avoid being killed under load
-            cpu: "4"
-            memory: "16Gi"
-            nvidia.com/gpu: 1 # GPU Limit
       volumes:
       - name: ollama-models-storage
         persistentVolumeClaim:

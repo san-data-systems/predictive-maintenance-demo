@@ -4,8 +4,11 @@ Flask
 # For parsing YAML configuration files
 PyYAML
 
+# Add the official ollama Python client library
+ollama
+
 # For making HTTP requests (will be used for actual API calls)
-# requests # Currently simulated, but good to have listed for next steps
+requests # Currently simulated, but good to have listed for next steps
 
 # --- Optional: For future enhancements or more complex scenarios ---
 # numpy # For advanced numerical operations

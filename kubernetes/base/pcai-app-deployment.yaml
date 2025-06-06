@@ -31,6 +31,8 @@ spec:
         envFrom:
         - secretRef:
             name: pcai-app-credentials
+        - secretRef:
+            name: opsramp-credentials
         volumeMounts:
         - name: config-volume
           mountPath: /app/config

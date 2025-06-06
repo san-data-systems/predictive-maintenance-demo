@@ -54,7 +54,22 @@ pcai_app:
       request_timeout_seconds: 180 
 
   opsramp: # For PCAI agent's own logging
-    logs_endpoint: "SIMULATED_OPSRAMP_API/pcai/agent_logs"
+    # Names of ENVIRONMENT VARIABLES that will store your OpsRamp credentials
+      env_var_tenant_id: "OPSRAMP_TENANT_ID"
+      env_var_api_key: "OPSRAMP_API_KEY"
+      env_var_api_secret: "OPSRAMP_API_SECRET"
+
+      # The base hostname for the OpsRamp API, without https://
+      api_hostname: "hpekaops.api.pov.opsramp.com"
+        
+      # The path for the authentication endpoint
+      token_endpoint_path: "/tenancy/auth/oauth/token"
+      
+      # The unique ID of the resource (Turbine_007) you created in OpsRamp
+      turbine_resource_id: "957836fe-7986-46da-bc28-b5d5cca08c85"
+        
+      # The path for the alert creation endpoint (includes a placeholder for tenantId)
+      alert_endpoint_path: "/api/v2/tenants/{tenantId}/alerts"
 
   servicenow:
     # IMPORTANT: Replace with YOUR actual ServiceNow developer instance HOSTNAME

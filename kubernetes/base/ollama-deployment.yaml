@@ -13,24 +13,33 @@ spec:
   template:
     metadata:
       labels:
-        # These labels must match the selector in ollama-service.yaml
         app: ollama
     spec:
       containers:
       - name: ollama
         image: ollama/ollama:latest
-        # --- MODIFICATION: Override container command to pull model then serve ---
-        # This ensures the model is available before the server starts accepting connections.
+        # --- FIX: Updated command to run server in background, pull, then wait ---
         command: ["/bin/sh", "-c"]
         args:
           - |
             echo "Ollama container starting..."
-            echo "Attempting to pull model 'llama3:8b'. This may take a few minutes on first run..."
+            # Start the server in the background
+            ollama serve &
+            # Capture the process ID of the server
+            pid=$!
+            echo "Ollama server started in background with PID: $pid"
+            
+            # Wait a few seconds for the server to be ready
+            sleep 5
+            
+            echo "Attempting to pull model 'llama3:8b'..."
             ollama pull llama3:8b
             echo "Model pull complete."
-            echo "Starting Ollama server..."
-            ollama serve
-        # --- END MODIFICATION ---
+            
+            echo "Ollama is running. Waiting for server process to exit..."
+            # Wait for the background server process. If it exits, the container will exit.
+            wait $pid
+        # --- END FIX ---
         ports:
         - containerPort: 11434
         volumeMounts:
@@ -39,6 +48,8 @@ spec:
         resources:
           limits:
             nvidia.com/gpu: 1
+            cpu: "4"
+            memory: "16Gi"
           requests:
             nvidia.com/gpu: 1
             cpu: "1"

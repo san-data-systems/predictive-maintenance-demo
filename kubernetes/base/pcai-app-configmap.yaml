@@ -6,7 +6,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: pcai-app-config
-  # namespace: pred-maint-demo # Ensure this matches your namespace if you use one
+  # The namespace will be applied by the 'kustomization.yaml' file
 data:
   # Key 1: The main configuration file for the entire application.
   # Note the updated Kubernetes service names for internal communication.
@@ -25,8 +25,7 @@ data:
     aruba_edge_simulator:
       device_id_template: "Edge_Sim_{company_name_short}_Node{id:03d}"
       default_device_id_num: 1
-      # This value will be overridden by an environment variable in the edge-simulator deployment manifest
-      # It points to the K8s service for the PCAI app.
+      # This value is overridden by the PCAI_AGENT_TRIGGER_ENDPOINT env var in the K8s deployment
       pcai_agent_trigger_endpoint: "http://pcai-app-service:5000/api/v1/analyze_trigger"
       thresholds:
         temperature_critical_c: 55.0
@@ -40,32 +39,33 @@ data:
       agent_id_prefix_template: "PCAI_Agent_{company_name_short}"
       listen_host: "0.0.0.0"
       listen_port: 5000
-      # IMPORTANT: This path must match the volumeMount path in pcai-app-deployment.yaml
-      knowledge_base_path: "/app/knowledge_base_files"
+      knowledge_base_path: "/app/knowledge_base_files" # The path inside the container where this ConfigMap is mounted
       
       llm_config:
         provider: "ollama"
         ollama:
-          model_name: "llama3:8b" # As per your request
-          # IMPORTANT: This URL uses the K8s service name for Ollama, not localhost.
+          model_name: "llama3:8b"
+          # This URL uses the K8s service name, not localhost.
           api_base_url: "http://ollama-service:11434"
           request_timeout_seconds: 180
 
       opsramp:
-        logs_endpoint: "SIMULATED_OPSRAMP_API/pcai/agent_logs"
+        env_var_tenant_id: "OPSRAMP_TENANT_ID"
+        env_var_api_key: "OPSRAMP_API_KEY"
+        env_var_api_secret: "OPSRAMP_API_SECRET"
+        api_hostname: "hpekaops.api.pov.opsramp.com"
+        token_endpoint_path: "/tenancy/auth/oauth/token"
+        alert_endpoint_path: "/api/v2/tenants/{tenantId}/alerts"
+        # IMPORTANT: Replace with the unique ID of the resource you created in OpsRamp
+        turbine_resource_id: "957836fe-7986-46da-bc28-b5d5cca08c85"
 
       servicenow:
         # IMPORTANT: Replace with YOUR actual ServiceNow developer instance HOSTNAME
         instance_hostname: "dev194183.service-now.com"
-        
         env_var_api_user: "SERVICENOW_API_USER"
         env_var_api_password: "SERVICENOW_API_PASSWORD"
-        
         target_table: "incident"
         default_assignment_group: "Mechanical Maintenance Team"
-        default_gear_part_number: "P/N G-5432"
-        default_bearing_part_number: "P/N B-8771"
-
         custom_fields:
           source_system: "u_source_system"
           ai_diagnosis_confidence: "u_ai_diagnosis_confidence"
@@ -84,121 +84,37 @@ data:
     Last Updated: 2024-01-15
     Manufacturer: AeroGen Dynamics Ltd.
 
-    Chapter 1: Introduction
-    1.1. Overview of the GRX-II Model
-    The GRX-II is a direct-drive, variable speed wind turbine designed for high-efficiency power generation in moderate to high wind speed environments. Key components include the rotor assembly, nacelle, direct-drive permanent magnet generator, and the control system.
-
-    1.2. Safety Precautions
-    Always adhere to standard lockout/tagout procedures before performing any maintenance. Ensure all capacitors are discharged and the turbine is fully braked and secured. Refer to Safety Manual Doc ID: SM-GRX2-001 for complete details.
-
-    Chapter 4: Nacelle Systems
-    4.1. Gearbox Assembly (if applicable, older models)
-    Note: The GRX-II primary model is direct-drive. For GRX-I legacy models with gearbox, refer to Appendix B.
-
-    4.2. Yaw System
-    The yaw system is responsible for orienting the nacelle towards the wind. Regular lubrication of yaw gears and inspection of yaw motor brushes is essential. Torque settings for yaw bolts: 350 Nm.
-
     Chapter 7: Troubleshooting Common Faults
-    7.1. Blade Pitch Malfunctions
-    Pitch errors can lead to reduced efficiency or overspeed conditions. Check hydraulic pressure (if applicable) or electrical actuator integrity. Error codes P010-P075 relate to pitch system faults.
-
     7.2. Generator Overheating
-    Continuous operation above nominal temperature (85°C internal winding) can degrade insulation and reduce generator lifespan. Verify cooling system functionality (fan operation, coolant levels if liquid-cooled). Check for obstructed air vents.
+    Continuous operation above nominal temperature (85°C internal winding) can degrade insulation and reduce generator lifespan. Verify cooling system functionality.
 
     7.3. Vibration Analysis and Fault Signatures
-    The GRX-II is equipped with multiple vibration sensors. Baseline vibration signatures should be established post-commissioning. Section 7.3: High-frequency vibrations (115-125Hz) with harmonic sidebands often indicate early-stage gear tooth pitting. This is particularly relevant for auxiliary systems or older non-direct-drive components that might still use planetary gears for other functions, or if analyzing external coupled machinery. For the main generator, which is direct-drive, such frequencies might indicate bearing race issues or specific electrical faults manifesting as mechanical vibrations.
-
-    7.4. Electrical System Faults
-    Refer to the Electrical Schematics Manual (Doc ID: ES-GRX2-003). Common issues include contacter failures, inverter faults, or cable degradation. Inverter fault codes INV001-INV050 provide specific diagnostic information.
-
-    Appendix A: Lubrication Schedule
-    - Main Bearing: AeroLube Synth 500 - Annually or 8000 operating hours.
-    - Yaw Bearing: AeroGrease HTEP - Semi-annually.
-
-    Appendix B: Legacy Gearbox Maintenance (GRX-I Model Only)
-    B.1. Oil Analysis: Quarterly. Look for metal particles, water content.
-    B.2. Gear Inspection: Annually. Check for pitting, spalling, wear.
-    B.3. Bearing Replacement: As indicated by vibration analysis or oil condition. Typical lifespan 5-7 years under normal load.
+    The GRX-II is equipped with multiple vibration sensors. Section 7.3: High-frequency vibrations (115-125Hz) with harmonic sidebands often indicate early-stage gear tooth pitting. This is particularly relevant for auxiliary systems.
 
   # Key 3: The repair history knowledge base file
   turbine_repair_history_logs.txt: |
     Turbine Maintenance & Repair Log - Master Record
 
-    Asset ID: DemoCorp_Turbine_001
-    Date: 2023-05-12
-    Technician: J. Abernathy
-    Work Order: WO2023050034
-    Issue: Low power output reported by SCADA.
-    Action: Investigated pitch system. Found hydraulic leak in actuator for Blade 2. Replaced seal kit (P/N PK-B2-009). Tested. Output normal.
-    Hours: 6
-
-    Asset ID: DemoCorp_Turbine_007
-    Date: 2023-07-20
-    Technician: S. Lee
-    Work Order: WO2023070112
-    Issue: Routine 6-month inspection.
-    Action: All checks normal. Lubricated yaw bearing. Cleaned nacelle air filters. No anomalies noted.
-    Hours: 4
-
-    Asset ID: DemoCorp_Turbine_004 (identical model to DemoCorp_Turbine_007)
-    Date: 2024-02-10
-    Technician: M. Valerius
-    Work Order: WO2024020015
-    Issue: Intermittent high vibration alerts from nacelle sensor VIB-N-02 (rear generator bearing). Asset continued operation with monitoring.
-    Action: Scheduled detailed inspection.
-    Hours: 1
-
     Asset ID: DemoCorp_Turbine_004 (identical model to DemoCorp_Turbine_007)
     Date: 2024-03-03
-    Technician: M. Valerius, R. Costa
-    Work Order: WO2024030002 (Follow-up to WO2024020015)
+    Work Order: WO2024030002
     Issue: Critical vibration and increasing temperature at rear generator bearing. Turbine taken offline. Similar acoustic signature at 120Hz recorded 3 weeks prior to P/N G-5432 bearing assembly failure.
-    Action: Disassembled rear generator section. Found catastrophic failure of bearing P/N G-5432. Significant scoring on shaft. Replaced bearing assembly (P/N G-5432), performed minor shaft polishing. Oil flush and replacement.
-    Parts Used: G-5432 (Bearing Assembly), AeroLube Synth 500 (Oil)
-    Hours: 24 (2 technicians)
-    Notes: Recommend reviewing vibration thresholds for 120Hz band on similar GRX-II units. This specific acoustic pattern was a clear precursor.
+    Action: Found catastrophic failure of bearing P/N G-5432. Replaced bearing assembly.
+    Notes: Recommend reviewing vibration thresholds for 120Hz band on similar GRX-II units.
 
     Asset ID: DemoCorp_Turbine_007
     Date: 2024-08-01
-    Technician: P. Jones
     Work Order: WO2024080005
-    Issue: Annual main bearing lubrication.
-    Action: Main bearing lubricated with AeroLube Synth 500. Old grease samples taken for analysis - results pending. All other checks nominal.
-    Hours: 5
-
-    Asset ID: DemoCorp_Turbine_002
-    Date: 2024-11-15
-    Technician: J. Abernathy
-    Work Order: WO2024110078
-    Issue: Inverter fault INV023 - IGBT module failure.
-    Action: Replaced IGBT module (P/N IGBT-M4). Reset inverter. Tested under load. OK.
-    Hours: 3
+    Issue: Annual main bearing lubrication. Action: Nominal.
 
   # Key 4: The expert notes knowledge base file
   expert_technician_notes.txt: |
     Expert Technician Field Notes & Best Practices - Compiled by Lead Engineering Team
-
     Lead Engineer: Dr. Eva Rostova
-    Date Compiled: 2024-03-20
-
-    General Observations:
-    - Always cross-reference SCADA data with physical inspection findings. Anomalies can sometimes be sensor faults rather than mechanical issues.
-    - Pay attention to changes over time (trends) in vibration, temperature, and oil quality, not just absolute threshold breaches. Early detection is key.
 
     GRX-II Model Specific Notes:
-    1. Main Bearing Wear: The GRX-II main bearing is generally robust. However, inadequate lubrication or contamination can lead to premature wear. Look for an increase in low-frequency (1-10Hz) vibration components. An increase in overall RMS vibration without a clear spectral peak can also indicate distributed wear.
+    1. Main Bearing Wear: The GRX-II main bearing is generally robust. Look for an increase in low-frequency (1-10Hz) vibration components.
 
-    2. Yaw System Misalignment: If yaw error exceeds 5 degrees 평균 (avg) over an hour, it can induce significant stress on the drivetrain and blades. Check yaw brake pressures and sensor calibration.
+    2. Direct-Drive Generator Nuances: Analyst Note (Dr. Eva Rostova): For gearbox model GRX-II, correlate 120Hz vibration spikes with oil temperature. A rise >5°C suggests accelerated wear. The core part is the 120Hz + temp correlation.
 
-    3. Direct-Drive Generator Nuances: While eliminating the gearbox simplifies things, the large diameter permanent magnet generator has its own failure modes. Thermal cycling can affect magnet bonding over many years. Stator winding insulation degradation is primarily temperature-driven. Analyst Note (Dr. Eva Rostova): For gearbox model GRX-II, correlate 120Hz vibration spikes with oil temperature. A rise >5°C suggests accelerated wear. (Note: This advice about "gearbox model GRX-II" is a slight misnomer, as GRX-II is primarily direct drive, but this could refer to auxiliary systems or be a note carried over from GRX-I experience that operators still find relevant for certain components if they exhibit similar frequencies due to bearings etc. The core part is the 120Hz + temp correlation).
-
-    4. Blade Imbalance or Damage: Minor leading-edge erosion is common, but significant damage or imbalance will manifest as 1P (rotor speed) and 2P/3P vibrations. Use strobe inspection during slow rotation if suspected.
-
-    5. Inverter Cooling Fans: These small components are critical. A failed inverter cooling fan (often a simple NTC thermistor reports high temp) can lead to a full shutdown. Regularly check fan operation and replace noisy units proactively. Part number for fan: FAN-INV-24V.
-
-    6. Acoustic Signatures: Experienced technicians can often identify developing issues by changes in the turbine's sound. For GRX-II, a distinct high-pitched whine developing around the 1-2kHz range, especially if correlated with generator load, might indicate an early electrical issue in the stator or inverter switching harmonics. A rumbling sound from the main bearing is a late-stage indicator.
-
-    7. Oil Particle Analysis: For any oil-lubricated systems (e.g., hydraulic pitch system, legacy components), particle count and elemental analysis are invaluable. High copper might indicate bushing wear, while iron could be gears or bearings. Silicon often points to dirt ingress (check seals).
-
-    Maintenance Strategy Note (K. Singh, Ops Manager):
-    - We are transitioning towards more condition-based maintenance intervals, leveraging sensor data and these AI diagnostic tools. Calendar-based tasks will remain for safety-critical items and consumables.
+    3. Acoustic Signatures: Experienced technicians can often identify developing issues by changes in the turbine's sound.

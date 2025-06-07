@@ -2,23 +2,29 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# --- MODIFICATION: Uncommented 'namespace' ---
-# This ensures that 'kubectl apply -k .' from the base or any overlay
-# will automatically deploy all resources into the 'pred-maint-demo' namespace.
 namespace: pred-maint-demo
 
-
-resources:
-- namespace.yaml
-- ollama-pvc.yaml
-- ollama-deployment.yaml
-- ollama-service.yaml
-- pcai-app-configmap.yaml
-- pcai-app-deployment.yaml
-- pcai-app-service.yaml
-- edge-simulator-deployment.yaml
 labels:
 - includeSelectors: true
   pairs:
     app.kubernetes.io/name: pred-maint-demo
     app.kubernetes.io/part-of: hpe-ai-demo
+
+resources:
+  - namespace.yaml
+  # MQTT Broker
+  - mqtt-broker-configmap.yaml
+  - mqtt-broker-deployment.yaml
+  - mqtt-broker-service.yaml
+  # IoT Sensor
+  - iot-sensor-deployment.yaml
+  # Edge Simulator
+  - edge-simulator-deployment.yaml
+  # PCAI App
+  - pcai-app-configmap.yaml
+  - pcai-app-deployment.yaml
+  - pcai-app-service.yaml
+  # Ollama
+  - ollama-pvc.yaml
+  - ollama-deployment.yaml
+  - ollama-service.yaml

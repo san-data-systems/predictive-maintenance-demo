@@ -9,6 +9,7 @@ import logging
 
 from utilities import get_utc_timestamp
 
+# It's good practice for each module to have its own logger
 logger = logging.getLogger(__name__)
 
 class OpsRampConnector:
@@ -18,31 +19,45 @@ class OpsRampConnector:
     """
     def __init__(self, opsramp_config: dict, pcai_agent_id: str):
         self.pcai_agent_id = pcai_agent_id
+        
+        # Get credentials from environment variables, using names from config
         self.tenant_id = os.environ.get(opsramp_config.get("env_var_tenant_id"))
         self.api_key = os.environ.get(opsramp_config.get("env_var_api_key"))
         self.api_secret = os.environ.get(opsramp_config.get("env_var_api_secret"))
+        
+        # Get URL components from config
         self.api_hostname = opsramp_config.get("api_hostname")
         self.token_path = opsramp_config.get("token_endpoint_path")
         self.alert_path_template = opsramp_config.get("alert_endpoint_path")
         self.turbine_resource_id = opsramp_config.get("turbine_resource_id")
+        
         self.access_token = None
-
+        
         if not all([self.tenant_id, self.api_key, self.api_secret, self.api_hostname, self.turbine_resource_id]):
             logger.warning("OpsRamp config or credentials missing. OpsRamp integration will be disabled.")
             self.token_url, self.alert_url = None, None
         else:
+            # Build the URLs based on the corrected structure from OpsRamp docs
             self.token_url = f"https://{self.api_hostname}{self.token_path}"
             self.alert_url = f"https://{self.api_hostname}{self.alert_path_template.format(tenantId=self.tenant_id)}"
+            
             logger.info("OpsRampConnector initialized. Ready to get token and send alerts.")
-            self.get_access_token()
+            self.get_access_token() # Get a token on startup
 
     def get_access_token(self):
+        """Fetches an OAuth2 access token from OpsRamp."""
         if not self.token_url or not self.api_key or not self.api_secret:
             logger.error("Cannot get OpsRamp token, configuration or credentials missing.")
+            self.access_token = None
             return False
-        logger.info(f"Requesting new OpsRamp access token...")
+            
+        logger.info(f"Requesting new OpsRamp access token from {self.token_url}...")
         headers = {"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"}
-        payload = {"grant_type": "client_credentials", "client_id": self.api_key, "client_secret": self.api_secret}
+        payload = {
+            "grant_type": "client_credentials",
+            "client_id": self.api_key,
+            "client_secret": self.api_secret,
+        }
         try:
             response = requests.post(self.token_url, headers=headers, data=payload, timeout=15)
             response.raise_for_status()
@@ -50,38 +65,49 @@ class OpsRampConnector:
             if self.access_token:
                 logger.info("Successfully retrieved OpsRamp access token.")
                 return True
-            logger.error("Failed to retrieve OpsRamp access token.")
-            self.access_token = None
-            return False
+            else:
+                logger.error("Failed to retrieve OpsRamp access token, 'access_token' key not in response.")
+                self.access_token = None
+                return False
         except requests.exceptions.RequestException as e:
             logger.error(f"Error getting OpsRamp access token: {e}", exc_info=True)
             self.access_token = None
             return False
 
     def send_pcai_log(self, asset_id: str, log_level: str, message: str, details: dict = None):
-        if not self.alert_url or not self.access_token:
-            logger.error("Cannot send OpsRamp alert: URL not configured or not authenticated.")
-            return {"status": "error", "message": "Connector not ready"}
+        """
+        Formats and sends a log/event as an Alert to OpsRamp.
+        """
+        if not self.alert_url:
+            logger.warning("OpsRamp alert URL not configured. Cannot send alert.")
+            return {"status": "error", "message": "Configuration error"}
 
+        if not self.access_token:
+            logger.warning("No OpsRamp access token available. Attempting to refresh...")
+            if not self.get_access_token():
+                logger.error("Failed to refresh OpsRamp token. Aborting send.")
+                return {"status": "error", "message": "Authentication failed"}
+
+        # Mappings based on OpsRamp API requirements
         priority_map = {"CRITICAL_ERROR": "P1", "ERROR": "P2", "WARN": "P3", "SUCCESS": "P5", "INFO": "P5"}
+        state_map = {"CRITICAL_ERROR": "CRITICAL", "ERROR": "CRITICAL", "WARN": "WARNING", "SUCCESS": "OK", "INFO": "OK"}
         subject_prefix_map = {"RAG_RESULT": "AI RAG Log", "SUCCESS": "AI Action Success", "ERROR": "AI Action Error", "CRITICAL_ERROR": "AI Agent Critical Error"}
+        
         subject_prefix = subject_prefix_map.get(log_level.upper(), "AI Agent Log")
         
         if "LLM Diagnosis" in message:
             subject = f"AI Diagnosis ({asset_id}): {details.get('summary', 'Details in description')[:150]}"
         else:
             subject = f"{subject_prefix}: {message[:150]}"
-            
-        current_state = "OPEN" if log_level.upper() in ["ERROR", "WARN", "CRITICAL_ERROR"] else "OK"
 
+        # This is the single alert object
         alert_object = {
             "resourceId": self.turbine_resource_id,
             "subject": subject,
-            "currentState": current_state,
+            "currentState": state_map.get(log_level.upper(), "OK"),
             "priority": priority_map.get(log_level.upper(), "P5"),
-            # --- FINAL FIX: Set 'app' and 'serviceName' to expected values ---
             "app": "Custom",
-            "serviceName": self.turbine_resource_id, # Using the unique resourceId is a robust way to identify the service
+            "serviceName": self.turbine_resource_id, # Using the resource ID as a stable service identifier
             "customFields": [
                 {"name": "ai_agent_log_level", "value": log_level.upper()},
                 {"name": "ai_agent_message", "value": message}
@@ -92,17 +118,19 @@ class OpsRampConnector:
                 field_value = json.dumps(value, default=str) if isinstance(value, (dict, list)) else str(value)
                 alert_object["customFields"].append({"name": key, "value": field_value})
         
+        # The OpsRamp API expects a list of alerts, even if there's only one.
         payload = [alert_object]
 
         headers = {"Authorization": f"Bearer {self.access_token}", "Content-Type": "application/json", "Accept": "application/json"}
         try:
-            logger.info(f"Sending alert to OpsRamp with app '{alert_object['app']}': {subject}")
+            logger.info(f"Sending alert to OpsRamp with state '{alert_object['currentState']}': {subject}")
             response = requests.post(self.alert_url, headers=headers, json=payload, timeout=15)
             
             if response.status_code in [200, 201, 202, 204]:
                 logger.info(f"Successfully sent alert to OpsRamp. Status: {response.status_code}")
                 return {"status": "success"}
             else:
+                # Handle potential token expiration (401 Unauthorized)
                 if response.status_code == 401:
                     logger.warning("OpsRamp token may have expired. Retrying after refresh.")
                     if self.get_access_token():
@@ -111,6 +139,7 @@ class OpsRampConnector:
                         response.raise_for_status()
                         logger.info("Successfully sent alert to OpsRamp after token refresh.")
                         return {"status": "success"}
+                # For any other error, raise it to be caught by the generic exception block
                 response.raise_for_status()
             
         except requests.exceptions.HTTPError as e:
@@ -131,7 +160,7 @@ class ServiceNowConnector:
         self.api_password_env_var = servicenow_config.get("env_var_api_password", "SERVICENOW_API_PASSWORD")
         self.api_user, self.api_password = os.environ.get(self.api_user_env_var), os.environ.get(self.api_password_env_var)
         if not self.api_user or not self.api_password:
-            logger.warning(f"ServiceNow API credentials not found in env vars. API calls will fail.")
+            logger.warning(f"ServiceNow API credentials not found in env vars: {self.api_user_env_var}, {self.api_password_env_var}. API calls will fail.")
         self.target_table = servicenow_config.get("target_table", "incident")
         self.api_base_url = f"https://{self.instance_hostname}/api/now/table/{self.target_table}"
         self.custom_fields_map = servicenow_config.get("custom_fields", {})

@@ -1,4 +1,3 @@
-# kubernetes/base/edge-simulator-deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,15 +16,18 @@ spec:
     spec:
       containers:
       - name: edge-simulator-app
-        image: sdsajoshi/edge-simulator-app:latest # IMPORTANT: Replace with your actual image
-        # --- MODIFICATION: Added CPU and Memory resources ---
-        resources:
-          requests:
-            cpu: "100m" # 0.1 of a CPU core
-            memory: "128Mi"
-          limits:
-            cpu: "500m" # 0.5 of a CPU core
-            memory: "256Mi"
+        image: sdsajoshi/edge-simulator-app:latest # IMPORTANT: Replace with your image
         env:
+        # Environment variable for the MQTT Broker service endpoint
+        - name: MQTT_BROKER_HOSTNAME
+          value: "mqtt-broker-service"
+        # Environment variable for the PCAI App service endpoint
         - name: PCAI_AGENT_TRIGGER_ENDPOINT
           value: "http://pcai-app-service:5000/api/v1/analyze_trigger"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"

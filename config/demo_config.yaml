@@ -1,105 +1,80 @@
+# config/demo_config.yaml
+
 # ----------------------------------------------------------------------
 # Configuration for the AI-Driven Predictive Maintenance Demo
 # ----------------------------------------------------------------------
 
 # --- Global Settings ---
-# Used for dynamic naming in simulations if desired
 company_name_short: "DemoCorp"
+
+# --- MQTT Broker Settings ---
+mqtt:
+  # For local runs, the broker will be on localhost.
+  # For Kubernetes, this is overridden by the MQTT_BROKER_HOSTNAME env var
+  # which points to the K8s service name 'mqtt-broker-service'.
+  broker_hostname: "localhost"
+  broker_port: 1883
+  # The topic where sensor data will be published.
+  sensor_topic: "hpe/demo/turbine/007/sensors"
 
 # --- IoT Sensor Simulator Settings ---
 iot_sensor_simulator:
-  # Asset ID is constructed in the simulator using this as a base
   asset_id_prefix: "{company_name_short}_Turbine"
-  default_asset_number: 7 # e.g., for Turbine_007
+  default_asset_number: 7
   data_interval_seconds: 2
-  # Baseline temperature used by sensor to calculate increase during anomaly
-  # This helps RAG system and LLM correlate temperature rise
   base_temp_c: 42.0 # Should match the internal base_temp_c in TurbineSensor
 
 # --- Aruba Edge Simulator Settings ---
 aruba_edge_simulator:
-  # Device ID for the simulated edge device
   device_id_template: "Edge_Sim_{company_name_short}_Node{id:03d}"
-  default_device_id_num: 1 # e.g., for Node001
-  
-  # API Endpoint where the PCAI Agent Application is listening
-  # The Edge Simulator will POST trigger data to this URL
-  pcai_agent_trigger_endpoint: "http://localhost:5000/api/v1/analyze_trigger" # Ensure this matches PCAI app host/port
-
-  # Thresholds for gross anomaly detection at the edge
+  default_device_id_num: 1
+  # For local runs, this points to localhost.
+  # For Kubernetes, this is overridden by the PCAI_AGENT_TRIGGER_ENDPOINT env var
+  # which points to the K8s service name 'pcai-app-service'.
+  pcai_agent_trigger_endpoint: "http://localhost:5000/api/v1/analyze_trigger"
   thresholds:
     temperature_critical_c: 55.0
     vibration_anomaly_amp_g: 1.5 
     acoustic_critical_band_db: 70.0
 
-  # OpsRamp endpoints the Edge Simulator will (simulated) call
-  opsramp:
-    metrics_endpoint: "SIMULATED_OPSRAMP_API/edge/metrics"
-    events_endpoint: "SIMULATED_OPSRAMP_API/edge/events"
-
 # --- PCAI Agent Application Settings ---
 pcai_app:
   agent_id_prefix_template: "PCAI_Agent_{company_name_short}" 
-  
   listen_host: "0.0.0.0"
-  listen_port: 5000       
-  
-  knowledge_base_path: "knowledge_base_files/"
+  listen_port: 5000
+  knowledge_base_path: "/app/knowledge_base_files" # Path inside K8s container
   
   llm_config:
     provider: "ollama" 
     ollama:
-      model_name: "llama3:8b" # Ensure this model is pulled and Ollama server is running
+      model_name: "llama3:8b" 
+      # For local runs, Ollama is at localhost. For K8s, it's the service name.
       api_base_url: "http://localhost:11434" 
-      request_timeout_seconds: 180 
+      request_timeout_seconds: 180
 
-  opsramp: # For PCAI agent's own logging
-    # Names of ENVIRONMENT VARIABLES that will store your OpsRamp credentials
-      env_var_tenant_id: "OPSRAMP_TENANT_ID"
-      env_var_api_key: "OPSRAMP_API_KEY"
-      env_var_api_secret: "OPSRAMP_API_SECRET"
-
-      # The base hostname for the OpsRamp API, without https://
-      api_hostname: "hpekaops.api.pov.opsramp.com"
-        
-      # The path for the authentication endpoint
-      token_endpoint_path: "/tenancy/auth/oauth/token"
-      
-      # The unique ID of the resource (Turbine_007) you created in OpsRamp
-      turbine_resource_id: "957836fe-7986-46da-bc28-b5d5cca08c85"
-        
-      # The path for the alert creation endpoint (includes a placeholder for tenantId)
-      alert_endpoint_path: "/api/v2/tenants/{tenantId}/alerts"
+  opsramp:
+    env_var_tenant_id: "OPSRAMP_TENANT_ID"
+    env_var_api_key: "OPSRAMP_API_KEY"
+    env_var_api_secret: "OPSRAMP_API_SECRET"
+    api_hostname: "hpekaops.api.pov.opsramp.com"
+    token_endpoint_path: "/tenancy/auth/oauth/token"
+    alert_endpoint_path: "/api/v2/tenants/{tenantId}/alerts"
+    # IMPORTANT: Replace with the unique ID of the resource you created in OpsRamp
+    turbine_resource_id: "957836fe-7986-46da-bc28-b5d5cca08c85"
 
   servicenow:
     # IMPORTANT: Replace with YOUR actual ServiceNow developer instance HOSTNAME
-    # Example: "dev12345.service-now.com" (Do NOT include "https://" here)
-    instance_hostname: "dev194183.service-now.com" 
-    
-    # Names of ENVIRONMENT VARIABLES that will store your ServiceNow credentials
-    # You MUST set these environment variables in your shell before running the demo.
+    instance_hostname: "dev194183.service-now.com"
     env_var_api_user: "SERVICENOW_API_USER"
     env_var_api_password: "SERVICENOW_API_PASSWORD"
-
-    target_table: "incident" # Or "wm_order" if you prefer and have it set up
-    
-    default_assignment_group: "Mechanical Maintenance Team" 
-    default_gear_part_number: "P/N G-5432"
-    default_bearing_part_number: "P/N B-8771"
-
-    # Custom field names in ServiceNow (ensure these exist on your target_table)
-    # The Python code will use these keys to map data to your ServiceNow fields.
+    target_table: "incident"
+    default_assignment_group: "Mechanical Maintenance Team"
     custom_fields:
       source_system: "u_source_system"
       ai_diagnosis_confidence: "u_ai_diagnosis_confidence"
       ai_reasoning: "u_ai_reasoning"
-      recommended_actions: "u_ai_recommended_actions" 
+      recommended_actions: "u_ai_recommended_actions"
       required_parts: "u_ai_required_parts"
 
   diagnosis:
-    # Confidence threshold (0.0 to 1.0) from LLM to trigger ServiceNow ticket
-    confidence_threshold_for_action: 0.70 
-
-# --- Knowledge Base Files Reminder ---
-# Ensure files like 'technical_manual_extracts.txt', etc., exist in 'knowledge_base_path'
-# and contain phrases targeted by your RAG component (for input to the LLM).
+    confidence_threshold_for_action: 0.70

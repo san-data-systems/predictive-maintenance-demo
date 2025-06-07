@@ -1,12 +1,15 @@
 # edge_logic/aruba_edge_simulator.py
 
 import json
-import time
 import os
-import requests 
+import requests
+import paho.mqtt.client as mqtt
+import logging
+import time
 
 from utilities import get_utc_timestamp, load_app_config, get_full_config
-from data_simulators.iot_sensor_simulator import TurbineSensor
+
+logger = logging.getLogger(__name__)
 
 class ArubaEdgeSimulator:
     """
@@ -16,7 +19,6 @@ class ArubaEdgeSimulator:
     def __init__(self):
         self.config = load_app_config('aruba_edge_simulator')
         if not self.config:
-            print("FATAL ERROR: ArubaEdgeSimulator FAILED to load 'aruba_edge_simulator' configuration section. Cannot proceed.")
             raise ValueError("Failed to load 'aruba_edge_simulator' configuration section.")
 
         full_cfg_for_globals = get_full_config()
@@ -24,36 +26,27 @@ class ArubaEdgeSimulator:
         
         template = self.config.get('device_id_template')
         num = self.config.get('default_device_id_num')
-
         if not template or num is None:
-             error_msg = "Missing 'device_id_template' or 'default_device_id_num' in 'aruba_edge_simulator' config."
-             print(f"FATAL ERROR: {error_msg}")
-             raise KeyError(error_msg)
+             raise KeyError("Missing 'device_id_template' or 'default_device_id_num' in config.")
         self.device_id = template.format(company_name_short=company_name, id=num)
             
         self.thresholds = self.config.get('thresholds')
         if not self.thresholds:
-            error_msg = "Missing 'thresholds' in 'aruba_edge_simulator' config."
-            print(f"FATAL ERROR: {error_msg}")
-            raise KeyError(error_msg)
+            raise KeyError("Missing 'thresholds' in config.")
 
         opsramp_cfg = self.config.get('opsramp', {})
-        self.opsramp_metrics_endpoint = opsramp_cfg.get('metrics_endpoint', "FALLBACK_OPSRAMP_METRICS_ENDPOINT")
-        self.opsramp_events_endpoint = opsramp_cfg.get('events_endpoint', "FALLBACK_OPSRAMP_EVENTS_ENDPOINT")
+        self.opsramp_metrics_endpoint = opsramp_cfg.get('metrics_endpoint')
+        self.opsramp_events_endpoint = opsramp_cfg.get('events_endpoint')
         
         self.pcai_trigger_endpoint = os.environ.get(
             'PCAI_AGENT_TRIGGER_ENDPOINT', 
             self.config.get('pcai_agent_trigger_endpoint')
         )
-
         if not self.pcai_trigger_endpoint:
-            error_msg = "Missing 'pcai_agent_trigger_endpoint' in config and 'PCAI_AGENT_TRIGGER_ENDPOINT' environment variable not set."
-            print(f"FATAL ERROR: {error_msg}")
-            raise KeyError(error_msg)
+            raise KeyError("Missing 'pcai_agent_trigger_endpoint' in config or environment variable.")
 
-        print(f"INFO: [{self.device_id}] Aruba Edge Simulator initialized.")
+        print(f"INFO: [{self.device_id}] Aruba Edge Simulator logic initialized.")
         print(f"INFO: [{self.device_id}] PCAI Trigger Endpoint (Actual HTTP): {self.pcai_trigger_endpoint}")
-
 
     def _make_actual_api_call(self, endpoint: str, payload: dict, method: str = "POST"):
         print(f"\n--- MAKING ACTUAL HTTP API CALL [{method}] ---")
@@ -63,32 +56,20 @@ class ArubaEdgeSimulator:
         response_summary = {"status": "error", "message": "Call not attempted or unknown error"}
         try:
             if method.upper() == "POST":
-                response = requests.post(endpoint, json=payload, timeout=300) 
-            elif method.upper() == "GET":
-                response = requests.get(endpoint, params=payload, timeout=300)
+                response = requests.post(endpoint, json=payload, timeout=300)
             else:
                 print(f"ERROR: Unsupported HTTP method '{method}' for API call.")
-                response_summary = {"status": "error", "message": f"Unsupported HTTP method: {method}"}
-                return response_summary
+                return {"status": "error", "message": f"Unsupported HTTP method: {method}"}
+
             response.raise_for_status() 
-            
             print(f"SUCCESS: API Call to {endpoint} successful. Status: {response.status_code}")
             try:
                 response_summary = {"status": "success", "response_data": response.json(), "status_code": response.status_code}
             except requests.exceptions.JSONDecodeError: 
                 response_summary = {"status": "success", "response_data": response.text, "status_code": response.status_code}
-        except requests.exceptions.ConnectionError as e:
-            print(f"ERROR: API Call ConnectionError to {endpoint}: {e}")
-            response_summary = {"status": "error", "message": f"Connection error to {endpoint}: {e}"}
-        except requests.exceptions.Timeout as e:
-            print(f"ERROR: API Call Timeout to {endpoint}: {e}")
-            response_summary = {"status": "error", "message": f"Timeout error for {endpoint}: {e}"}
-        except requests.exceptions.HTTPError as e:
-            print(f"ERROR: API Call HTTPError to {endpoint}: {e.response.status_code} - {e.response.text[:200]}...")
-            response_summary = {"status": "error", "message": f"HTTP error: {e.response.status_code}", "details": e.response.text[:500]}
         except requests.exceptions.RequestException as e:
-            print(f"ERROR: API Call RequestException to {endpoint}: {e}")
-            response_summary = {"status": "error", "message": f"General request error for {endpoint}: {e}"}
+            print(f"ERROR: API Call to {endpoint} failed: {e}")
+            response_summary = {"status": "error", "message": str(e)}
         finally:
             print(f"--- END ACTUAL HTTP API CALL (Status: {response_summary.get('status')}) ---")
         return response_summary
@@ -96,15 +77,15 @@ class ArubaEdgeSimulator:
     def _send_metrics_to_opsramp(self, sensor_data: dict):
         metrics_payload = {
             "source_device_id": self.device_id,
-            "asset_id": sensor_data["asset_id"], 
-            "timestamp": sensor_data["timestamp"], 
+            "asset_id": sensor_data["asset_id"],
+            "timestamp": sensor_data["timestamp"],
             "metrics": {
-                "temperature_c": sensor_data["temperature_c"],
+                "temperature_c": sensor_data.get("temperature_c"),
                 "temperature_increase_c": sensor_data.get("temperature_increase_c"),
-                "vibration_overall_amplitude_g": sensor_data["vibration_overall_amplitude_g"],
-                "vibration_dominant_frequency_hz": sensor_data["vibration_dominant_frequency_hz"],
-                "acoustic_overall_db": sensor_data["acoustic_overall_db"],
-                "acoustic_critical_band_db": sensor_data["acoustic_critical_band_db"],
+                "vibration_overall_amplitude_g": sensor_data.get("vibration_overall_amplitude_g"),
+                "vibration_dominant_frequency_hz": sensor_data.get("vibration_dominant_frequency_hz"),
+                "acoustic_overall_db": sensor_data.get("acoustic_overall_db"),
+                "acoustic_critical_band_db": sensor_data.get("acoustic_critical_band_db"),
             }
         }
         if sensor_data.get("vibration_anomaly_signature_freq_hz") is not None:
@@ -116,14 +97,16 @@ class ArubaEdgeSimulator:
         print(f"--- END SIMULATED API CALL ---")
 
     def _detect_gross_anomalies(self, sensor_data: dict) -> list:
+        # --- FIX: Restored full dictionary definitions ---
         detected_anomalies = []
-        if sensor_data["temperature_c"] > self.thresholds["temperature_critical_c"]:
+        if sensor_data.get("temperature_c", 0) > self.thresholds.get("temperature_critical_c", 999):
             detected_anomalies.append({
                 "type": "CriticalTemperature",
                 "message": f"Temperature {sensor_data['temperature_c']}°C exceeds threshold of {self.thresholds['temperature_critical_c']}°C.",
-                "value": sensor_data["temperature_c"], "threshold": self.thresholds["temperature_critical_c"]})
+                "value": sensor_data["temperature_c"], "threshold": self.thresholds["temperature_critical_c"]
+            })
         if sensor_data.get("vibration_anomaly_signature_amp_g") is not None and \
-           sensor_data["vibration_anomaly_signature_amp_g"] > self.thresholds["vibration_anomaly_amp_g"]:
+           sensor_data["vibration_anomaly_signature_amp_g"] > self.thresholds.get("vibration_anomaly_amp_g", 999):
             detected_anomalies.append({
                 "type": "HighAmplitudeVibrationSignature",
                 "message": (f"Vibration anomaly signature {sensor_data['vibration_anomaly_signature_amp_g']}g "
@@ -131,14 +114,16 @@ class ArubaEdgeSimulator:
                             f"exceeds threshold of {self.thresholds['vibration_anomaly_amp_g']}g."),
                 "anomaly_frequency_hz": sensor_data['vibration_anomaly_signature_freq_hz'],
                 "anomaly_amplitude_g": sensor_data['vibration_anomaly_signature_amp_g'],
-                "threshold_amp_g": self.thresholds['vibration_anomaly_amp_g']})
-        if sensor_data["acoustic_critical_band_db"] > self.thresholds["acoustic_critical_band_db"]:
+                "threshold_amp_g": self.thresholds['vibration_anomaly_amp_g']
+            })
+        if sensor_data.get("acoustic_critical_band_db", 0) > self.thresholds.get("acoustic_critical_band_db", 999):
             detected_anomalies.append({
                 "type": "AnomalousAcousticCriticalBand",
                 "message": f"Acoustic critical band {sensor_data['acoustic_critical_band_db']}dB exceeds threshold of {self.thresholds['acoustic_critical_band_db']}dB.",
-                "value_db": sensor_data["acoustic_critical_band_db"], "threshold_db": self.thresholds['acoustic_critical_band_db']})
+                "value_db": sensor_data["acoustic_critical_band_db"], "threshold_db": self.thresholds['acoustic_critical_band_db']
+            })
         return detected_anomalies
-
+        
     def _send_event_to_opsramp(self, sensor_data: dict, anomaly_details: dict):
         event_title = f"Anomalous {anomaly_details['type']} detected on {sensor_data['asset_id']}"
         if anomaly_details['type'] == "HighAmplitudeVibrationSignature": 
@@ -167,11 +152,7 @@ class ArubaEdgeSimulator:
             "full_sensor_data_at_trigger": sensor_data 
         }
         print(f"INFO: [{self.device_id}] Preparing to send Anomaly Trigger to PCAI for {sensor_data['asset_id']}")
-        api_call_result = self._make_actual_api_call(self.pcai_trigger_endpoint, pcai_trigger_payload, method="POST")
-        if api_call_result and api_call_result.get("status") == "success":
-            print(f"INFO: [{self.device_id}] Successfully sent trigger to PCAI. Response status: {api_call_result.get('status_code')}")
-        else:
-            print(f"WARN: [{self.device_id}] Failed to send trigger to PCAI or received error. Details: {api_call_result}")
+        self._make_actual_api_call(self.pcai_trigger_endpoint, pcai_trigger_payload, method="POST")
 
     def process_sensor_data(self, sensor_data: dict):
         print(f"\nINFO: [{self.device_id}] Processing data for {sensor_data['asset_id']} at {sensor_data['timestamp']}")
@@ -186,70 +167,55 @@ class ArubaEdgeSimulator:
         else:
             print(f"INFO: [{self.device_id}] Data for {sensor_data['asset_id']} within normal edge parameters.")
 
-# --- NEW INDEFINITE SIMULATION LOGIC ---
 if __name__ == "__main__":
-    sensor_asset_id = "Default_Sensor_Asset_000_EdgeMain"
-    sensor_data_interval = 2
-    sensor_base_temp = 42.0
+    config = get_full_config()
+    if not config:
+        print("FATAL: Could not load configuration. Exiting.")
+        exit(1)
+    mqtt_config = config.get('mqtt', {})
+    broker_hostname = os.environ.get("MQTT_BROKER_HOSTNAME", mqtt_config.get('broker_hostname', 'localhost'))
+    broker_port = int(os.environ.get("MQTT_BROKER_PORT", mqtt_config.get('broker_port', 1883)))
+    topic = mqtt_config.get('sensor_topic', 'hpe/demo/default/sensors')
 
     try:
-        full_cfg_main = get_full_config() 
-        iot_sim_cfg_main = {}
-        if full_cfg_main:
-            iot_sim_cfg_main = full_cfg_main.get('iot_sensor_simulator', {})
-            company_name_main = full_cfg_main.get('company_name_short', 'TestCo')
-            
-            asset_prefix_template_main = iot_sim_cfg_main.get('asset_id_prefix', "{company_name_short}_Turbine")
-            asset_prefix_main = asset_prefix_template_main.format(company_name_short=company_name_main)
-            asset_num_main = iot_sim_cfg_main.get('default_asset_number', 7)
-            sensor_asset_id = f"{asset_prefix_main}_{asset_num_main:03d}"
-            
-            sensor_data_interval = iot_sim_cfg_main.get('data_interval_seconds', sensor_data_interval)
-            sensor_base_temp = iot_sim_cfg_main.get('base_temp_c', sensor_base_temp)
-            print(f"INFO: [EdgeSim __main__] Loaded IoT sensor settings using common_utils for {sensor_asset_id}.")
+        edge_sim = ArubaEdgeSimulator()
+    except (ValueError, KeyError) as e:
+        print(f"FATAL: Could not initialize ArubaEdgeSimulator. Exiting. Error: {e}")
+        exit(1)
+
+    def on_connect(client, userdata, flags, reason_code, properties):
+        if reason_code.is_failure:
+            print(f"Failed to connect to MQTT Broker: {reason_code}. Exiting.")
+            os._exit(1)
         else:
-            print(f"WARN: [EdgeSim __main__] Full config not loaded by common_utils. Using default sensor settings.")
+            print(f"Successfully connected to MQTT Broker. Subscribing to topic: '{topic}'")
+            client.subscribe(topic)
 
-        edge_sim = ArubaEdgeSimulator() 
-        sensor = TurbineSensor(asset_id=sensor_asset_id, base_temp_c_from_config=sensor_base_temp)
+    def on_message(client, userdata, msg):
+        print(f"\n--- MQTT message received on topic '{msg.topic}' ---")
+        try:
+            payload_str = msg.payload.decode('utf-8')
+            sensor_data = json.loads(payload_str)
+            edge_sim.process_sensor_data(sensor_data)
+        except json.JSONDecodeError:
+            print(f"ERROR: Could not decode JSON from payload: {msg.payload}")
+        except Exception as e:
+            print(f"ERROR: An error occurred processing message: {e}", exc_info=True)
 
-        print(f"\n--- Starting INDEFINITE Edge Simulation with IoT Sensor: {sensor.asset_id} ---")
-        print(f"--- Edge will make ACTUAL HTTP calls to PCAI endpoint: {edge_sim.pcai_trigger_endpoint} ---")
-        print(f"--- Data interval: {sensor_data_interval}s. Anomaly will toggle on/off. Press Ctrl+C to stop. ---")
-        
-        iteration_count = 0
-        is_currently_anomalous = False
-        # Define how long each period of normal/anomalous data should last
-        NORMAL_CYCLES = 15
-        ANOMALY_CYCLES = 20 # Run anomaly for a bit longer to ensure it's triggered/seen
+    mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="aruba-edge-simulator-01")
+    mqtt_client.on_connect = on_connect
+    mqtt_client.on_message = on_message
 
-        while True:
-            cycle_in_period = iteration_count % (NORMAL_CYCLES + ANOMALY_CYCLES)
-
-            # Check if we should switch state
-            if cycle_in_period == 0 and is_currently_anomalous:
-                print("\nDEMO OPERATOR ACTION: Reverting anomaly in sensor (end of period)...\n")
-                sensor.set_anomaly_status(False)
-                is_currently_anomalous = False
-            elif cycle_in_period == NORMAL_CYCLES and not is_currently_anomalous:
-                print("\nDEMO OPERATOR ACTION: Injecting anomaly into sensor (start of period)...\n")
-                sensor.set_anomaly_status(True)
-                is_currently_anomalous = True
-
-            print(f"\n--- Cycle {iteration_count + 1} (Period Cycle: {cycle_in_period + 1}, Anomaly State: {is_currently_anomalous}) ---")
-            
-            current_sensor_data = sensor.generate_data()
-            print(f"SENSOR ({sensor.asset_id}) generated: {json.dumps(current_sensor_data, indent=2)}")
-            edge_sim.process_sensor_data(current_sensor_data)
-            
-            iteration_count += 1
-            time.sleep(sensor_data_interval)
-
-    except (ValueError, KeyError) as e_conf: 
-        print(f"FATAL: Configuration error during ArubaEdgeSimulator setup: {e_conf}")
+    print(f"--- Starting Aruba Edge Simulator as MQTT Subscriber ---")
+    print(f"  Connecting to MQTT Broker: {broker_hostname}:{broker_port}")
+    
+    try:
+        mqtt_client.connect(broker_hostname, broker_port, 60)
+        mqtt_client.loop_forever()
     except KeyboardInterrupt:
-        print("\nINFO: Edge simulation test stopped by user.")
-    except Exception as e_generic:
-        print(f"An unexpected error occurred in EdgeSim __main__: {e_generic}")
-        import traceback
-        traceback.print_exc()
+        print("\nINFO: Edge Simulator stopped by user.")
+    except Exception as e:
+        print(f"An unexpected error occurred in Edge Simulator's main loop: {e}", exc_info=True)
+    finally:
+        mqtt_client.disconnect()
+        print("INFO: MQTT client disconnected.")

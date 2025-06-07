@@ -1,4 +1,3 @@
-# kubernetes/base/pcai-app-deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,22 +16,22 @@ spec:
     spec:
       containers:
       - name: pcai-app
-        image: sdsajoshi/pcai-app:latest # IMPORTANT: Replace with your actual image
+        image: sdsajoshi/pcai-app:latest # IMPORTANT: Replace with your image
         ports:
         - containerPort: 5000
-        # --- MODIFICATION: Added CPU and Memory resources ---
         resources:
           requests:
-            cpu: "250m" # 0.25 of a CPU core
-            memory: "512Mi" # 512 Mebibytes
+            cpu: "250m"
+            memory: "512Mi"
           limits:
-            cpu: "1" # 1 full CPU core
-            memory: "1Gi" # 1 Gibibyte
+            cpu: "1"
+            memory: "1Gi"
+        # Inject credentials from K8s Secrets into the container as environment variables
         envFrom:
         - secretRef:
-            name: pcai-app-credentials
+            name: pcai-app-credentials # For ServiceNow
         - secretRef:
-            name: opsramp-credentials
+            name: opsramp-credentials  # For OpsRamp
         volumeMounts:
         - name: config-volume
           mountPath: /app/config

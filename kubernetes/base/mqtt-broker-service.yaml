@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mqtt-broker-service
+spec:
+  selector:
+    app: mqtt-broker
+  ports:
+  - name: mqtt
+    protocol: TCP
+    port: 1883
+    targetPort: 1883
+  type: ClusterIP

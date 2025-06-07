@@ -1,6 +1,6 @@
 # kubernetes/base/pcai-app-configmap.yaml
 # This ConfigMap externalizes configuration and knowledge base files from the container image.
-# It will be mounted as volumes into the PCAI Application pod.
+# It will be mounted as volumes into the PCAI Application pod and is also used by the Edge/IoT simulators.
 
 apiVersion: v1
 kind: ConfigMap
@@ -9,24 +9,36 @@ metadata:
   # The namespace will be applied by the 'kustomization.yaml' file
 data:
   # Key 1: The main configuration file for the entire application.
-  # Note the updated Kubernetes service names for internal communication.
   demo_config.yaml: |
     # ----------------------------------------------------------------------
     # Configuration for the AI-Driven Predictive Maintenance Demo (for K8s)
     # ----------------------------------------------------------------------
     company_name_short: "DemoCorpK8s"
 
+    # --- MQTT Broker Settings ---
+    mqtt:
+      # For local runs, the broker will be on localhost.
+      # For Kubernetes, this is overridden by the MQTT_BROKER_HOSTNAME env var
+      # which points to the K8s service name 'mqtt-broker-service'.
+      broker_hostname: "localhost"
+      broker_port: 1883
+      # The topic where sensor data will be published.
+      sensor_topic: "hpe/demo/turbine/007/sensors"
+
+    # --- IoT Sensor Simulator Settings ---
     iot_sensor_simulator:
       asset_id_prefix: "{company_name_short}_Turbine"
       default_asset_number: 7
       data_interval_seconds: 2
       base_temp_c: 42.0
 
+    # --- Aruba Edge Simulator Settings ---
     aruba_edge_simulator:
       device_id_template: "Edge_Sim_{company_name_short}_Node{id:03d}"
       default_device_id_num: 1
-      # This value is overridden by the PCAI_AGENT_TRIGGER_ENDPOINT env var in the K8s deployment
-      pcai_agent_trigger_endpoint: "http://pcai-app-service:5000/api/v1/analyze_trigger"
+      # In Kubernetes, this is overridden by the PCAI_AGENT_TRIGGER_ENDPOINT env var
+      # which points to the K8s service 'pcai-app-service'.
+      pcai_agent_trigger_endpoint: "http://localhost:5000/api/v1/analyze_trigger"
       thresholds:
         temperature_critical_c: 55.0
         vibration_anomaly_amp_g: 1.5
@@ -35,11 +47,13 @@ data:
         metrics_endpoint: "SIMULATED_OPSRAMP_API/edge/metrics"
         events_endpoint: "SIMULATED_OPSRAMP_API/edge/events"
 
+    # --- PCAI Agent Application Settings ---
     pcai_app:
       agent_id_prefix_template: "PCAI_Agent_{company_name_short}"
       listen_host: "0.0.0.0"
       listen_port: 5000
-      knowledge_base_path: "/app/knowledge_base_files" # The path inside the container where this ConfigMap is mounted
+      # This path must match the volumeMount path in pcai-app-deployment.yaml
+      knowledge_base_path: "/app/knowledge_base_files"
       
       llm_config:
         provider: "ollama"

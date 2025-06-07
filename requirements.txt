@@ -1,19 +1,20 @@
-# Core web framework for PCAI Agent Application
-Flask
+# requirements.txt
+#
+# Pinned versions ensure a stable and reproducible environment.
+# These versions are known to work with the current state of the demo code.
 
-# For parsing YAML configuration files
-PyYAML
+# For web application (PCAI Agent)
+Flask==3.0.3
 
-# Add the official ollama Python client library
-ollama
+# For configuration file parsing
+PyYAML==6.0.1
 
-# For making HTTP requests (will be used for actual API calls)
-requests # Currently simulated, but good to have listed for next steps
+# For local LLM interaction
+ollama==0.2.1
 
-# --- Optional: For future enhancements or more complex scenarios ---
-# numpy # For advanced numerical operations
-# scikit-learn # For ML tasks, TF-IDF, etc.
-# sentence-transformers # For sentence embeddings in RAG
-# faiss-cpu # For local vector similarity search (CPU version)
-# torch # If using PyTorch based models
-# pandas # For extensive data manipulation
+# For making HTTP API calls (to PCAI App, ServiceNow, OpsRamp)
+requests==2.32.3
+
+# For MQTT communication between IoT sensor and Edge
+# Version 2.x introduced the new callback signatures. Pinning to this major version is key.
+paho-mqtt==2.0.0

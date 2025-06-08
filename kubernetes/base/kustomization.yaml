@@ -28,3 +28,11 @@ resources:
   - ollama-pvc.yaml
   - ollama-deployment.yaml
   - ollama-service.yaml
+  # --- ADDED SECTION ---
+  # PostgreSQL Database for ThingsBoard
+  - postgres-pvc.yaml
+  - postgres-deployment.yaml
+  - postgres-service.yaml
+  # ThingsBoard Application
+  - thingsboard-deployment.yaml
+  - thingsboard-service.yaml

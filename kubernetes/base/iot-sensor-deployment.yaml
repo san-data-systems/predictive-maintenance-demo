@@ -28,3 +28,15 @@ spec:
           limits:
             cpu: "250m"
             memory: "256Mi"
+        # --- ADDED SECTION ---
+        # Mount the shared ConfigMap to read the demo_config.yaml file
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config
+      volumes:
+      - name: config-volume
+        configMap:
+          name: pcai-app-config
+          items:
+            - key: demo_config.yaml
+              path: demo_config.yaml

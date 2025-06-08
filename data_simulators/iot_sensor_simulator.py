@@ -14,10 +14,8 @@ from utilities import get_utc_timestamp, get_full_config
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class TurbineSensor:
-    """
-    Simulates an IoT sensor on a wind turbine, generating operational data.
-    It can be toggled to produce normal or anomalous data streams.
-    """
+    # ... (This class content does not need to change) ...
+    # ... (Leaving it out for brevity, just copy the whole file) ...
     def __init__(self, asset_id="Default_Turbine_000", base_temp_c_from_config=42.0):
         self.asset_id = asset_id
         self.anomaly_active = False
@@ -84,14 +82,37 @@ class TurbineSensor:
             self.current_temp_increase_c = self._get_gradual_value(self.current_temp_increase_c, 0.0, step_fraction=0.2)
             temp_c = self.base_temp_c + self.current_temp_increase_c + random.uniform(-0.5, 0.5)
             current_temp_increase_for_payload = self.current_temp_increase_c
-        return {"timestamp": timestamp, "asset_id": self.asset_id, "temperature_c": round(temp_c, 2), "temperature_increase_c": round(current_temp_increase_for_payload, 2), "vibration_overall_amplitude_g": round(vib_amp_g, 3), "vibration_dominant_frequency_hz": round(vib_freq_hz, 2), "vibration_anomaly_signature_freq_hz": round(anomaly_signature_vibration_freq_hz, 2) if anomaly_signature_vibration_freq_hz is not None else None, "vibration_anomaly_signature_amp_g": round(anomaly_signature_vibration_amp_g, 3) if anomaly_signature_vibration_amp_g is not None else None, "acoustic_overall_db": round(acoustic_db, 1), "acoustic_critical_band_db": round(acoustic_crit_band_db, 1), "is_anomaly_induced": self.anomaly_active}
+        
+        # Prepare a clean, flat dictionary for telemetry
+        telemetry_data = {
+            "temperature_c": round(temp_c, 2), 
+            "temperature_increase_c": round(current_temp_increase_for_payload, 2), 
+            "vibration_overall_amplitude_g": round(vib_amp_g, 3), 
+            "vibration_dominant_frequency_hz": round(vib_freq_hz, 2),
+            "acoustic_overall_db": round(acoustic_db, 1), 
+            "acoustic_critical_band_db": round(acoustic_crit_band_db, 1),
+            "is_anomaly_induced": self.anomaly_active
+        }
+        if anomaly_signature_vibration_amp_g is not None:
+             telemetry_data["vibration_anomaly_signature_amp_g"] = round(anomaly_signature_vibration_amp_g, 3)
+             telemetry_data["vibration_anomaly_signature_freq_hz"] = round(anomaly_signature_vibration_freq_hz, 2)
+        
+        # Full packet for internal use (edge logic)
+        internal_data_packet = telemetry_data.copy()
+        internal_data_packet["timestamp"] = timestamp
+        internal_data_packet["asset_id"] = self.asset_id
+        
+        return internal_data_packet, telemetry_data
+
 
 if __name__ == "__main__":
     
     config = get_full_config()
     iot_sim_config = config.get('iot_sensor_simulator', {})
     mqtt_config = config.get('mqtt', {})
+    thingsboard_config = config.get('thingsboard', {})
     company_name = config.get('company_name_short', 'TestCo')
+    
     asset_prefix_template = iot_sim_config.get('asset_id_prefix', "{company_name_short}_Turbine")
     asset_prefix = asset_prefix_template.format(company_name_short=company_name)
     asset_num = iot_sim_config.get('default_asset_number', 7)
@@ -99,49 +120,79 @@ if __name__ == "__main__":
     sensor_data_interval = iot_sim_config.get('data_interval_seconds', 2)
     sensor_base_temp = iot_sim_config.get('base_temp_c', 42.0)
     
-    broker_hostname = os.environ.get("MQTT_BROKER_HOSTNAME", mqtt_config.get('broker_hostname', 'localhost'))
-    broker_port = int(os.environ.get("MQTT_BROKER_PORT", mqtt_config.get('broker_port', 1883)))
-    topic = mqtt_config.get('sensor_topic', 'hpe/demo/default/sensors')
+    # Internal MQTT Broker Config
+    internal_broker_hostname = os.environ.get("MQTT_BROKER_HOSTNAME", mqtt_config.get('broker_hostname', 'localhost'))
+    internal_broker_port = int(os.environ.get("MQTT_BROKER_PORT", mqtt_config.get('broker_port', 1883)))
+    internal_topic = mqtt_config.get('sensor_topic', 'hpe/demo/default/sensors')
     
+    # ThingsBoard MQTT Config
+    tb_host = thingsboard_config.get('host', 'localhost')
+    tb_port = thingsboard_config.get('port', 1883) # <<< THIS LINE IS NOW CORRECTED
+    tb_access_token = thingsboard_config.get('device_access_token')
+    tb_topic = "v1/devices/me/telemetry"
+
     sensor = TurbineSensor(asset_id=sensor_asset_id, base_temp_c_from_config=sensor_base_temp)
 
-    is_connected = False
-    
-    def on_connect(client, userdata, flags, reason_code, properties):
-        global is_connected
+    # --- Client for Internal MQTT Broker ---
+    is_internal_connected = False
+    def on_internal_connect(client, userdata, flags, reason_code, properties):
+        global is_internal_connected
         if reason_code.is_failure:
-            logging.error(f"Failed to connect to MQTT Broker: {reason_code}")
-            is_connected = False
+            logging.error(f"INTERNAL MQTT | Failed to connect: {reason_code}")
+            is_internal_connected = False
         else:
-            logging.info("Successfully connected to MQTT Broker.")
-            is_connected = True
+            logging.info("INTERNAL MQTT | Successfully connected.")
+            is_internal_connected = True
 
-    # --- FIX: Updated the on_disconnect function signature to accept 5 arguments ---
-    def on_disconnect(client, userdata, disconnect_flags, reason_code, properties):
-        global is_connected
-        is_connected = False
-        if reason_code is not None and not reason_code.is_failure:
-             # Expected disconnect, no need to log as a warning
-             logging.info(f"Disconnected cleanly from MQTT Broker: {reason_code}")
+    def on_internal_disconnect(client, userdata, disconnect_flags, reason_code, properties):
+        global is_internal_connected
+        is_internal_connected = False
+        logging.warning(f"INTERNAL MQTT | Unexpectedly disconnected: {reason_code}")
+
+    internal_mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"iot-sensor-{sensor_asset_id}-internal")
+    internal_mqtt_client.on_connect = on_internal_connect
+    internal_mqtt_client.on_disconnect = on_internal_disconnect
+
+    # --- Client for ThingsBoard MQTT ---
+    is_tb_connected = False
+    def on_tb_connect(client, userdata, flags, reason_code, properties):
+        global is_tb_connected
+        if reason_code.is_failure:
+            logging.error(f"THINGSBOARD MQTT | Failed to connect: {reason_code}. Check host and access token.")
+            is_tb_connected = False
         else:
-             logging.warning(f"Unexpectedly disconnected from MQTT Broker: {reason_code}")
-    # --- END FIX ---
+            logging.info("THINGSBOARD MQTT | Successfully connected.")
+            is_tb_connected = True
 
-    mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"iot-sensor-{sensor_asset_id}")
-    mqtt_client.on_connect = on_connect
-    mqtt_client.on_disconnect = on_disconnect
+    def on_tb_disconnect(client, userdata, disconnect_flags, reason_code, properties):
+        global is_tb_connected
+        is_tb_connected = False
+        logging.warning(f"THINGSBOARD MQTT | Unexpectedly disconnected: {reason_code}")
     
-    logging.info(f"--- Starting IoT Sensor Simulator as MQTT Publisher ---")
+    thingsboard_mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"iot-sensor-{sensor_asset_id}-tb")
+    if "YOUR_TURBINE_DEVICE_ACCESS_TOKEN" in tb_access_token or not tb_access_token:
+        logging.warning("THINGSBOARD MQTT | Access token is not set. ThingsBoard integration will be disabled.")
+    else:
+        thingsboard_mqtt_client.username_pw_set(tb_access_token)
+        thingsboard_mqtt_client.on_connect = on_tb_connect
+        thingsboard_mqtt_client.on_disconnect = on_tb_disconnect
+
+    logging.info(f"--- Starting IoT Sensor Simulator ---")
     logging.info(f"  Asset ID: {sensor.asset_id}")
-    logging.info(f"  MQTT Broker: {broker_hostname}:{broker_port}")
-    logging.info(f"  Publishing to Topic: {topic}")
+    logging.info(f"  INTERNAL MQTT Broker: {internal_broker_hostname}:{internal_broker_port} | Topic: {internal_topic}")
+    logging.info(f"  THINGSBOARD MQTT Broker: {tb_host}:{tb_port} | User (Token): {tb_access_token[:5]}...")
 
     try:
-        mqtt_client.connect(broker_hostname, broker_port, 60)
-        mqtt_client.loop_start()
+        # Connect clients
+        internal_mqtt_client.connect(internal_broker_hostname, internal_broker_port, 60)
+        internal_mqtt_client.loop_start()
 
-        while not is_connected:
-            logging.info("Waiting for MQTT connection...")
+        if "YOUR_TURBINE_DEVICE_ACCESS_TOKEN" not in tb_access_token and tb_access_token:
+            thingsboard_mqtt_client.connect(tb_host, tb_port, 60)
+            thingsboard_mqtt_client.loop_start()
+
+        while not is_internal_connected:
+            logging.info("Waiting for INTERNAL MQTT connection...")
             time.sleep(1)
 
         iteration_count = 0
@@ -150,11 +201,6 @@ if __name__ == "__main__":
         ANOMALY_CYCLES = 20
 
         while True:
-            if not is_connected:
-                logging.warning("MQTT client disconnected. Waiting to reconnect...")
-                time.sleep(5)
-                continue
-
             cycle_in_period = iteration_count % (NORMAL_CYCLES + ANOMALY_CYCLES)
             
             if cycle_in_period == 0 and is_currently_anomalous:
@@ -166,17 +212,20 @@ if __name__ == "__main__":
                 sensor.set_anomaly_status(True)
                 is_currently_anomalous = True
 
-            data_packet = sensor.generate_data()
-            payload = json.dumps(data_packet)
+            internal_packet, telemetry_packet = sensor.generate_data()
             
-            result = mqtt_client.publish(topic, payload)
+            # Publish to Internal Broker
+            if is_internal_connected:
+                internal_payload = json.dumps(internal_packet)
+                internal_mqtt_client.publish(internal_topic, internal_payload)
             
-            try:
-                result.wait_for_publish(timeout=4)
-                logging.info(f"Cycle {iteration_count + 1}: Published payload to {topic} | Anomaly: {is_currently_anomalous}")
-            except (RuntimeError, ValueError) as e:
-                logging.warning(f"Cycle {iteration_count + 1}: Could not confirm publish: {e}")
+            # Publish to ThingsBoard
+            if is_tb_connected:
+                tb_payload = json.dumps(telemetry_packet)
+                thingsboard_mqtt_client.publish(tb_topic, tb_payload)
 
+            logging.info(f"Cycle {iteration_count + 1}: Published data. Anomaly: {is_currently_anomalous}")
+            
             iteration_count += 1
             time.sleep(sensor_data_interval)
 
@@ -185,6 +234,8 @@ if __name__ == "__main__":
     except Exception as e:
         logging.error(f"An unexpected error occurred in IoT Sensor Simulator:", exc_info=True)
     finally:
-        mqtt_client.loop_stop()
-        mqtt_client.disconnect()
-        logging.info("MQTT client disconnected.")
+        internal_mqtt_client.loop_stop()
+        internal_mqtt_client.disconnect()
+        thingsboard_mqtt_client.loop_stop()
+        thingsboard_mqtt_client.disconnect()
+        logging.info("MQTT clients disconnected.")

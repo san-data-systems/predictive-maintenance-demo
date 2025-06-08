@@ -1,0 +1,143 @@
+{
+  "title": "Turbine Predictive Maintenance",
+  "name": "Turbine Predictive Maintenance",
+  "image": null,
+  "mobileHide": false,
+  "mobileOrder": null,
+  "configuration": {
+    "description": "Live monitoring dashboard for the AI-Driven Predictive Maintenance Demo.",
+    "entityAliases": {
+      "65fc2d63-0773-bf13-7bcd-22e1b8ecfa06": {
+        "id": "65fc2d63-0773-bf13-7bcd-22e1b8ecfa06",
+        "alias": "Turbine_007",
+        "filter": {
+          "type": "singleEntity",
+          "resolveMultiple": false,
+          "singleEntity": {
+            "entityType": "DEVICE",
+            "id": "568f7240-43d2-11f0-bfc6-e300ce2b95e5"
+          }
+        }
+      }
+    },
+    "widgets": {
+      "bfa1395e-873a-e0eb-dad0-7e21fbb27bae": {
+        "typeFullFqn": "system.cards.value_card",
+        "type": "latest",
+        "config": {
+          "datasources": [{"type": "entity", "entityAliasId": "65fc2d63-0773-bf13-7bcd-22e1b8ecfa06", "dataKeys": [{"name": "is_anomaly_induced", "type": "timeseries", "label": "System Status", "usePostProcessing": true, "postFuncBody": "return value === \"true\" ? \"ANOMALY\" : \"NORMAL\";"}]}],
+          "showTitle": true,
+          "title": "System Status",
+          "settings": { "labelPosition": "top", "layout": "column", "valueFont": { "size": 36, "weight": "500" }, "background": {"color": "#fff"} }
+        }
+      },
+      "14ad3589-1c2a-9dae-f14d-4381dc374965": {
+        "typeFullFqn": "system.cards.value_card",
+        "type": "latest",
+        "config": {
+          "datasources": [{"type": "entity", "entityAliasId": "65fc2d63-0773-bf13-7bcd-22e1b8ecfa06", "dataKeys": [{"name": "temperature_increase_c", "type": "timeseries", "label": "Temperature Increase (°C)"}]}],
+          "showTitle": true,
+          "title": "Temperature Increase",
+          "units": "°C",
+          "decimals": 2,
+          "settings": { "labelPosition": "top", "layout": "column", "valueFont": { "size": 36, "weight": "500" }, "background": {"color": "#fff"} }
+        }
+      },
+      "13446866-04c6-1fe1-68f7-d2ae91821c27": {
+        "typeFullFqn": "system.analogue_gauges.radial_gauge_canvas_gauges",
+        "type": "latest",
+        "config": {
+          "datasources": [{"type": "entity", "entityAliasId": "65fc2d63-0773-bf13-7bcd-22e1b8ecfa06", "dataKeys": [{"name": "vibration_anomaly_signature_amp_g", "type": "timeseries", "label": "Anomaly Vibration (g)"}]}],
+          "showTitle": true,
+          "title": "Anomaly Vibration",
+          "units": "g",
+          "decimals": 3,
+          "settings": { "minValue": 0, "maxValue": 3, "unitTitle": "g" }
+        }
+      },
+      "c564415a-cd5f-a2eb-d914-1aa060aa1f6b": {
+        "typeFullFqn": "system.analogue_gauges.radial_gauge_canvas_gauges",
+        "type": "latest",
+        "config": {
+          "datasources": [{"type": "entity", "entityAliasId": "65fc2d63-0773-bf13-7bcd-22e1b8ecfa06", "dataKeys": [{"name": "temperature_c", "type": "timeseries", "label": "Temperature (°C)"}]}],
+          "showTitle": true,
+          "title": "Current Temperature",
+          "units": "°C",
+          "decimals": 2,
+          "settings": { "minValue": 35, "maxValue": 60, "unitTitle": "°C" }
+        }
+      },
+      "aaaf7b5b-ce78-183c-20b4-611a7db83b53": {
+        "typeFullFqn": "system.charts.timeseries",
+        "type": "timeseries",
+        "config": {
+          "datasources": [{"type": "entity", "entityAliasId": "65fc2d63-0773-bf13-7bcd-22e1b8ecfa06", "dataKeys": [{"name": "vibration_anomaly_signature_amp_g", "type": "timeseries", "label": "Anomaly Vibration (g)", "color": "#ffc107"}, {"name": "vibration_overall_amplitude_g", "type": "timeseries", "label": "Overall Vibration (g)", "color": "#2196f3"}]}],
+          "showTitle": true,
+          "title": "Vibration Amplitude Analysis",
+          "timewindow":{"realtime":{"timewindowMs":600000}},
+          "settings": { "legendConfig": { "position": "bottom" } }
+        }
+      },
+      "7f5f2733-0e9a-f216-7d0b-f2e498a82a5e": {
+        "typeFullFqn": "system.charts.timeseries",
+        "type": "timeseries",
+        "config": {
+          "datasources": [{"type": "entity", "entityAliasId": "65fc2d63-0773-bf13-7bcd-22e1b8ecfa06", "dataKeys": [{"name": "vibration_dominant_frequency_hz", "type": "timeseries", "label": "Dominant Frequency (Hz)", "color": "#4caf50"}, {"name": "vibration_anomaly_signature_freq_hz", "type": "timeseries", "label": "Anomaly Frequency (Hz)", "color": "#ffc107"}]}],
+          "showTitle": true,
+          "title": "Vibration Frequency Analysis",
+          "timewindow":{"realtime":{"timewindowMs":600000}},
+          "settings": { "legendConfig": { "position": "bottom" } }
+        }
+      },
+      "d5239a99-acff-bb01-a16b-14ae770c502b": {
+        "typeFullFqn": "system.charts.timeseries",
+        "type": "timeseries",
+        "config": {
+          "datasources": [{"type": "entity", "entityAliasId": "65fc2d63-0773-bf13-7bcd-22e1b8ecfa06", "dataKeys": [{"name": "temperature_c", "type": "timeseries", "label": "Temperature (°C)", "color": "#f44336"}, {"name": "acoustic_critical_band_db", "type": "timeseries", "label": "Acoustic (dB)", "color": "#7e57c2"}]}],
+          "showTitle": true,
+          "title": "Thermal & Acoustic Analysis",
+          "timewindow":{"realtime":{"timewindowMs":600000}},
+          "settings": { "legendConfig": { "position": "bottom" } }
+        }
+      },
+      "3b60868a-d908-c2c2-31dc-5e236df1218c": {
+        "typeFullFqn": "system.cards.entities_table",
+        "type": "latest",
+        "config": {
+          "datasources": [{"type": "entity", "entityAliasId": "65fc2d63-0773-bf13-7bcd-22e1b8ecfa06", "dataKeys": [{"name": "temperature_c", "type": "timeseries", "label": "Temp"}, {"name": "vibration_anomaly_signature_amp_g", "label": "Anomaly Vib"}, {"name": "acoustic_critical_band_db", "label": "Acoustic"}, {"name": "is_anomaly_induced", "label": "Anomaly?"}]}],
+          "showTitle": true,
+          "title": "Latest Readings",
+          "settings": { "displayPagination": true, "defaultPageSize": 10 }
+        }
+      }
+    },
+    "states": {
+      "default": {
+        "name": "default",
+        "root": true,
+        "layouts": {
+          "main": {
+            "widgets": {
+              "bfa1395e-873a-e0eb-dad0-7e21fbb27bae": { "col": 0, "row": 0, "sizeX": 6, "sizeY": 4 },
+              "14ad3589-1c2a-9dae-f14d-4381dc374965": { "col": 6, "row": 0, "sizeX": 6, "sizeY": 4 },
+              "13446866-04c6-1fe1-68f7-d2ae91821c27": { "col": 12, "row": 0, "sizeX": 6, "sizeY": 5 },
+              "c564415a-cd5f-a2eb-d914-1aa060aa1f6b": { "col": 18, "row": 0, "sizeX": 6, "sizeY": 5 },
+              "aaaf7b5b-ce78-183c-20b4-611a7db83b53": { "col": 0, "row": 5, "sizeX": 12, "sizeY": 7 },
+              "7f5f2733-0e9a-f216-7d0b-f2e498a82a5e": { "col": 12, "row": 5, "sizeX": 12, "sizeY": 7 },
+              "d5239a99-acff-bb01-a16b-14ae770c502b": { "col": 0, "row": 12, "sizeX": 12, "sizeY": 7 },
+              "3b60868a-d908-c2c2-31dc-5e236df1218c": { "col": 12, "row": 12, "sizeX": 12, "sizeY": 7 }
+            },
+            "gridSettings": {
+              "backgroundColor": "#eeeeee",
+              "columns": 24,
+              "margin": 10,
+              "outerMargin": true
+            }
+          }
+        }
+      }
+    },
+    "settings": { "stateControllerId": "entity", "showTitle": true, "toolbarAlwaysOpen": true },
+    "filters": {}
+  }
+}

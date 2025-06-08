@@ -24,6 +24,16 @@ data:
       broker_port: 1883
       # The topic where sensor data will be published.
       sensor_topic: "hpe/demo/turbine/007/sensors"
+    
+    # --- ThingsBoard Settings (for K8s) ---
+    thingsboard:
+      # This now points to the K8s service name, not localhost
+      host: "thingsboard-service"
+      # The default MQTT port exposed by the service
+      port: 1883
+      # IMPORTANT: You still need to manually create a device in the UI
+      # and paste its access token here before deploying.
+      device_access_token: "YOUR_TURBINE_DEVICE_ACCESS_TOKEN"
 
     # --- IoT Sensor Simulator Settings ---
     iot_sensor_simulator:

@@ -17,6 +17,14 @@ mqtt:
   # The topic where sensor data will be published.
   sensor_topic: "hpe/demo/turbine/007/sensors"
 
+thingsboard:
+  # The hostname or IP address of your ThingsBoard instance.
+  host: "localhost" # Or your ThingsBoard server IP/domain
+  port: 1884
+  # The access token for the device you create in ThingsBoard.
+  # This acts as the MQTT username for authentication.
+  device_access_token: "VeoL2kBuBjrtv8Bqb9hK"
+
 # --- IoT Sensor Simulator Settings ---
 iot_sensor_simulator:
   asset_id_prefix: "{company_name_short}_Turbine"

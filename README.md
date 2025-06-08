@@ -2,185 +2,38 @@
 # AI-Driven Predictive Maintenance Demo with HPE Technologies
 
 ## 1. Executive Summary
-This project demonstrates an end-to-end AI-powered predictive maintenance solution for critical industrial machinery. It showcases a modern, decoupled IoT architecture using MQTT for data streaming, with an Agentic AI component performing advanced diagnostics and triggering real-world actions.
 
-The demo directly addresses the operational and financial impact of unplanned downtime by proactively identifying potential equipment failures. It features an IoT sensor publishing data, an edge component subscribing to and analyzing that data, and a central AI brain that uses a local LLM (via Ollama) and Retrieval Augmented Generation (RAG) to diagnose faults and automatically create tickets in ServiceNow and alerts in OpsRamp.
+This project demonstrates an end-to-end AI-powered predictive maintenance solution for critical industrial machinery. It showcases the synergy of the HPE portfolio, including simulated components representing HPE Private Cloud AI (PCAI), HPE GreenLake, and OpsRamp, all underpinned by the comprehensive support of HPE Managed Services.
 
-## 2. Key Capabilities & Technologies Demonstrated
+The core of this demonstration is an Agentic AI component, powered by a locally hosted Large Language Model (LLM via Ollama), that performs advanced diagnostics. The demo directly addresses the operational and financial impact of unplanned downtime by proactively identifying potential equipment failures, performing an AI-driven diagnosis, and automatically generating a maintenance ticket in ServiceNow. It also visualizes the real-time health of the asset using a ThingsBoard dashboard.
 
-**Decoupled IoT Architecture**  
-A realistic data pipeline using an MQTT Broker (Eclipse Mosquitto) to decouple the IoT sensor from the edge application.
+## 2. Architecture & Demo Flow
 
-**Simulated Edge Logic**  
-An MQTT subscriber (ArubaEdgeSimulator) that processes live data streams, flags anomalies, and makes real API calls to trigger the central AI.
+The demonstration follows a clear, event-driven flow:
 
-**Central Agentic AI (PcaiAgentApplication)**
+1.  **IoT Sensor Simulator**: Generates and publishes real-time turbine sensor data (temperature, vibration, acoustics) via a local Mosquitto MQTT broker.
+2.  **ThingsBoard**: A separate visualization platform that also subscribes to the MQTT data stream to provide a rich, real-time dashboard of the asset's health.
+3.  **Edge Simulator**: Represents an edge device that subscribes to the MQTT data, detects gross anomalies based on pre-defined thresholds, and sends a trigger to the central AI.
+4.  **PCAI Agent Application**: A Flask server that receives the trigger, uses Retrieval Augmented Generation (RAG) with a local LLM to perform a detailed diagnosis, and logs its findings.
+5.  **ServiceNow**: If the AI's confidence is high, the PCAI agent makes a live API call to a ServiceNow instance to automatically create a prioritized incident ticket.
 
-- A Flask application that listens for triggers from the edge.
-- Utilizes a locally hosted Large Language Model (e.g., Llama 3 via Ollama) for sophisticated reasoning and diagnosis.
-- Employs a simple RAG system to provide the LLM with relevant context from a knowledge base.
+...
 
-**Real API Integrations**
+## 6. End-to-End Demo Flow Outline
 
-- **OpsRamp**: Sends real-time alerts and AI log data to a configured OpsRamp tenant for monitoring and visualization.
-- **ServiceNow**: Autonomously creates and populates detailed incident tickets in a real ServiceNow instance.
+This outlines the narrative flow of the live demonstration.
 
-**Secure Credential Management**  
-Uses environment variables and Kubernetes Secrets to securely handle API credentials.
+**Phase 1: Normal Operations**  
+Begin by showing the ThingsBoard dashboard. All metrics for "Turbine #007" are green and stable, indicating normal operation.
 
-**Cloud-Native Deployment**  
-A complete guide to containerizing all components with Docker and deploying them on a Kubernetes cluster using Kustomize.
+**Phase 2: Anomaly Inception**  
+An anomaly is discreetly injected. On the dashboard, vibration and/or acoustic graphs begin to show deviations, turning yellow or red. The Edge Simulator logs that it has detected an anomaly and is escalating it to the central AI.
 
-## 3. Folder Structure
-```plaintext
-hpe_predictive_maintenance_demo/
-├── config/
-│   └── demo_config.yaml
-├── data_simulators/
-│   └── iot_sensor_simulator.py
-├── edge_logic/
-│   └── aruba_edge_simulator.py
-├── knowledge_base_files/
-│   ├── ... (text files)
-├── pcai_app/
-│   ├── ... (python files)
-├── utilities/
-│   └── ... (python files)
-├── kubernetes/
-│   ├── base/
-│   │   ├── kustomization.yaml
-│   │   ├── namespace.yaml
-│   │   ├── mqtt-broker-configmap.yaml
-│   │   ├── mqtt-broker-deployment.yaml
-│   │   ├── mqtt-broker-service.yaml
-│   │   ├── iot-sensor-deployment.yaml
-│   │   ├── ... (other deployment and service files)
-│   └── overlays/
-│       └── development/
-│           └── kustomization.yaml
-├── .gitignore
-├── Dockerfile                # For the 'pcai_app'
-├── Dockerfile.edge           # For the 'edge_simulator_app'
-├── Dockerfile.sensor         # For the 'iot_sensor_app'
-├── main_demo_runner.py       # (OBSOLETE) For previous direct-call architecture
-├── README.md                 # This file
-└── requirements.txt
-```
+**Phase 3: AI-Powered Diagnosis**  
+The PCAI Agent logs show that it has received the trigger. It logs its "thought process" as it queries its knowledge base (technical manuals, repair logs) using RAG to understand the context of the sensor readings.
 
-## 4. Prerequisites
+**Phase 4: Automated Remediation**  
+The PCAI Agent logs its final diagnosis, confidence score, and recommended action. It then makes a live API call to ServiceNow, and a new, detailed incident ticket appears automatically in the ServiceNow UI.
 
-### For Local Execution
-- **Python**: Version 3.12+
-- **Docker Desktop**: Required to run the Mosquitto MQTT broker locally.
-- **Ollama**: Must be installed and running locally. [Ollama Website](https://ollama.com)
-- **LLM Model**: A model must be pulled via Ollama (e.g., llama3:8b):
-```bash
-ollama pull llama3:8b
-```
-- **ServiceNow & OpsRamp Credentials**: API credentials for both your ServiceNow PDI and your OpsRamp tenant.
-
-### For Kubernetes Deployment
-- All local prerequisites (for building/testing).
-- `kubectl`: The Kubernetes command-line tool.
-- **Kubernetes Cluster**: With at least one NVIDIA GPU-enabled worker node and the NVIDIA device plugin installed.
-- **Container Registry**: Access to a registry (Docker Hub, GCR, etc.) to push your images.
-
-## 5. Setup & Running the Demo (Locally)
-
-### Step 1: Set Environment Variables
-```bash
-# Activate virtual environment
-source venv/bin/activate
-
-# Set ServiceNow Credentials
-export SERVICENOW_API_USER="your_sn_username"
-export SERVICENOW_API_PASSWORD="your_sn_password"
-
-# Set OpsRamp Credentials
-export OPSRAMP_TENANT_ID="your_opsramp_tenant_id"
-export OPSRAMP_API_KEY="your_opsramp_api_key"
-export OPSRAMP_API_SECRET="your_opsramp_api_secret"
-```
-
-### Step 2: Configure and Run Components
-Ensure your `config/demo_config.yaml` is updated with your ServiceNow hostname and OpsRamp Resource ID.
-
-#### Terminal 1: Start MQTT Broker
-```bash
-docker run -it --rm -p 1883:1883 \
--v $(pwd)/config/mosquitto.conf:/mosquitto/config/mosquitto.conf \
-eclipse-mosquitto
-```
-
-#### Terminal 2: Start PCAI Agent App
-```bash
-python3 -m pcai_app.main_agent
-```
-
-#### Terminal 3: Start Edge Simulator (Subscriber)
-```bash
-source venv/bin/activate
-python3 -m edge_logic.aruba_edge_simulator
-```
-
-#### Terminal 4: Start IoT Sensor (Publisher)
-```bash
-source venv/bin/activate
-python3 -m data_simulators.iot_sensor_simulator
-```
-
-## 6. Kubernetes Deployment Guide
-
-### Step 1: Containerize All Applications
-```bash
-export REGISTRY_PATH="your-registry"
-
-# Build and push PCAI App
-docker build -f Dockerfile -t ${REGISTRY_PATH}/pcai-app:latest .
-docker push ${REGISTRY_PATH}/pcai-app:latest
-
-# Build and push Edge Simulator
-docker build -f Dockerfile.edge -t ${REGISTRY_PATH}/edge-simulator-app:latest .
-docker push ${REGISTRY_PATH}/edge-simulator-app:latest
-
-# Build and push IoT Sensor
-docker build -f Dockerfile.sensor -t ${REGISTRY_PATH}/iot-sensor-app:latest .
-docker push ${REGISTRY_PATH}/iot-sensor-app:latest
-```
-
-### Step 2: Configure Kubernetes Manifests
-- Update image paths in deployment files.
-- Update `pcai-app-configmap.yaml` with ServiceNow and OpsRamp details.
-
-### Step 3: Deploy to Kubernetes
-```bash
-kubectl apply -f kubernetes/base/namespace.yaml
-
-# Create Secrets
-kubectl create secret generic pcai-app-credentials \
-  --from-literal=SERVICENOW_API_USER='your_sn_user' \
-  --from-literal=SERVICENOW_API_PASSWORD='your_sn_password' \
-  -n pred-maint-demo
-
-kubectl create secret generic opsramp-credentials \
-  --from-literal=OPSRAMP_TENANT_ID='your_opsramp_tenant_id' \
-  --from-literal=OPSRAMP_API_KEY='your_opsramp_api_key' \
-  --from-literal=OPSRAMP_API_SECRET='your_opsramp_api_secret' \
-  -n pred-maint-demo
-
-# Apply the stack
-kubectl apply -k kubernetes/base/
-```
-
-### Step 4: Verify and Watch the Demo
-```bash
-kubectl get pods -n pred-maint-demo -w
-```
-Tail logs of all components to observe workflow.
-
-### Step 5: Cleanup
-```bash
-kubectl delete -k kubernetes/base/
-kubectl delete secret pcai-app-credentials opsramp-credentials -n pred-maint-demo
-kubectl delete namespace pred-maint-demo
-```
+**Phase 5: Closed-Loop Confirmation**  
+Return to the dashboard, which is now updated to show a "Maintenance Scheduled" or "Critical Alert" status, confirming that the entire process from detection to action is complete and visualized.

@@ -71,8 +71,8 @@ class OpsRampConnector:
 
     def send_pcai_log(self, asset_id: str, log_level: str, message: str, details: dict = None):
         """
-        Formats and sends a log/event as an Alert to OpsRamp with all custom
-        details formatted into the main description for guaranteed visibility.
+        Formats and sends a log/event as an Alert to OpsRamp, using the correct
+        'customFields' payload as an array of structured objects.
         """
         if not self.alert_url:
             logger.warning("OpsRamp alert URL not configured. Cannot send alert.")
@@ -88,26 +88,36 @@ class OpsRampConnector:
         priority_map = {"CRITICAL": "P1", "ERROR": "P2", "WARN": "P3", "INFO": "P5", "SUCCESS": "P5"}
         state_map = {"CRITICAL": "CRITICAL", "ERROR": "CRITICAL", "WARN": "WARNING", "INFO": "OK", "SUCCESS": "OK"}
         
-        # Add a unique timestamp to the subject to bypass OpsRamp's de-duplication
         timestamp_for_subject = get_utc_timestamp()
         subject = f"AI Agent Log ({log_level_upper}): {message[:120]} - {timestamp_for_subject}"
 
-        # Build a detailed description string for guaranteed visibility
-        description_parts = [message]
+        # --- FINAL FIX: Create a 'customFields' list of OBJECTS with name/value pairs ---
+        custom_fields_list = []
         if details:
-            description_parts.append("\n\n--- AI Diagnosis Details ---")
             for key, value in details.items():
-                clean_key = key.replace('_', ' ').title()
-                field_value = json.dumps(value, indent=2) if isinstance(value, (dict, list)) else str(value)
-                description_parts.append(f"\n{clean_key}: {field_value}")
-        full_description = "\n".join(description_parts)
+                # Ensure the value is a simple string for the 'value' field
+                if isinstance(value, list):
+                    value_str = ", ".join(map(str, value))
+                elif isinstance(value, dict):
+                    value_str = json.dumps(value)
+                else:
+                    value_str = str(value)
+                
+                # Create the object with 'name' and 'value' keys and append it to the list
+                custom_fields_list.append({
+                    "name": key,
+                    "value": value_str
+                })
+        # --- END OF FIX ---
+        
+        description = f"{message}\n\nSee custom fields for detailed diagnostic data."
 
-        # This payload structure is based on the official OpsRamp API documentation
         alert_object = {
             "subject": subject,
             "currentState": state_map.get(log_level_upper, "OK"),
             "priority": priority_map.get(log_level_upper, "P5"),
-            "description": full_description,
+            "description": description,
+            "customFields": custom_fields_list,
             "device": {
                 "resourceUUID": self.turbine_resource_id
             },
@@ -119,20 +129,12 @@ class OpsRampConnector:
         headers = {"Authorization": f"Bearer {self.access_token}", "Content-Type": "application/json", "Accept": "application/json"}
         
         try:
-            logger.info(f"Sending alert to OpsRamp with state '{alert_object['currentState']}'")
+            logger.info(f"Sending alert to OpsRamp with payload: {json.dumps(payload)}")
             response = requests.post(self.alert_url, headers=headers, json=payload, timeout=15)
             response.raise_for_status()
             logger.info(f"Successfully sent alert to OpsRamp. Status: {response.status_code}")
             return {"status": "success"}
         except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 401:
-                logger.warning("OpsRamp token may have expired. Retrying after refresh.")
-                if self.get_access_token():
-                    headers["Authorization"] = f"Bearer {self.access_token}"
-                    response = requests.post(self.alert_url, headers=headers, json=payload, timeout=15)
-                    response.raise_for_status()
-                    logger.info("Successfully sent alert to OpsRamp after token refresh.")
-                    return {"status": "success"}
             logger.error(f"Error sending alert to OpsRamp. Status: {e.response.status_code}, Body: {e.response.text[:500]}", exc_info=True)
             return {"status": "error", "message": f"HTTP Error: {e.response.status_code}"}
         except requests.exceptions.RequestException as e:

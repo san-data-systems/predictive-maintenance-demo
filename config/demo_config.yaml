@@ -7,38 +7,38 @@
 # --- Global Settings ---
 company_name_short: "DemoCorp"
 
-# --- MQTT Broker Settings ---
+# --- Internal MQTT Broker Settings ---
+# FIX: Renamed 'broker_hostname' to 'host' to match the code.
+# The 'mqtt' key remains the same.
 mqtt:
-  # For local runs, the broker will be on localhost.
-  # For Kubernetes, this is overridden by the MQTT_BROKER_HOSTNAME env var
-  # which points to the K8s service name 'mqtt-broker-service'.
-  broker_hostname: "localhost"
-  broker_port: 1883
-  # The topic where sensor data will be published.
+  host: "localhost"
+  port: 1883
   sensor_topic: "hpe/demo/turbine/007/sensors"
 
+# --- ThingsBoard IoT Platform MQTT Configuration ---
 thingsboard:
-  # The hostname or IP address of your ThingsBoard instance.
-  host: "localhost" # Or your ThingsBoard server IP/domain
+  host: "localhost"
   port: 1884
-  # The access token for the device you create in ThingsBoard.
-  # This acts as the MQTT username for authentication.
-  device_access_token: "VeoL2kBuBjrtv8Bqb9hK"
+  # FIX: You MUST replace this placeholder with the real token from your
+  # ThingsBoard device's "Access token" field.
+  device_token: "VeoL2kBuBjrtv8Bqb9hK"
 
 # --- IoT Sensor Simulator Settings ---
 iot_sensor_simulator:
   asset_id_prefix: "{company_name_short}_Turbine"
   default_asset_number: 7
-  data_interval_seconds: 2
-  base_temp_c: 42.0 # Should match the internal base_temp_c in TurbineSensor
+  data_interval_seconds: 5 # Increased for easier log reading during debug
+  base_temp_c: 42.0
+  vibration_normal_range: [0.1, 0.5]
+  acoustic_normal_range: [20.0, 35.0]
+  anomaly_start_chance: 0.15
+  anomaly_stop_chance: 0.4
+  anomaly_vibration_factor: 10.0
 
 # --- Aruba Edge Simulator Settings ---
 aruba_edge_simulator:
   device_id_template: "Edge_Sim_{company_name_short}_Node{id:03d}"
   default_device_id_num: 1
-  # For local runs, this points to localhost.
-  # For Kubernetes, this is overridden by the PCAI_AGENT_TRIGGER_ENDPOINT env var
-  # which points to the K8s service name 'pcai-app-service'.
   pcai_agent_trigger_endpoint: "http://localhost:5000/api/v1/analyze_trigger"
   thresholds:
     temperature_critical_c: 55.0
@@ -50,13 +50,12 @@ pcai_app:
   agent_id_prefix_template: "PCAI_Agent_{company_name_short}" 
   listen_host: "0.0.0.0"
   listen_port: 5000
-  knowledge_base_path: "/app/knowledge_base_files" # Path inside K8s container
+  knowledge_base_path: "knowledge_base_files" # Use relative path for local run
   
   llm_config:
     provider: "ollama" 
     ollama:
       model_name: "llama3:8b" 
-      # For local runs, Ollama is at localhost. For K8s, it's the service name.
       api_base_url: "http://localhost:11434" 
       request_timeout_seconds: 180
 
@@ -67,11 +66,9 @@ pcai_app:
     api_hostname: "hpekaops.api.pov.opsramp.com"
     token_endpoint_path: "/tenancy/auth/oauth/token"
     alert_endpoint_path: "/api/v2/tenants/{tenantId}/alerts"
-    # IMPORTANT: Replace with the unique ID of the resource you created in OpsRamp
     turbine_resource_id: "957836fe-7986-46da-bc28-b5d5cca08c85"
 
   servicenow:
-    # IMPORTANT: Replace with YOUR actual ServiceNow developer instance HOSTNAME
     instance_hostname: "dev194183.service-now.com"
     env_var_api_user: "SERVICENOW_API_USER"
     env_var_api_password: "SERVICENOW_API_PASSWORD"

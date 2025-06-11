@@ -52,37 +52,34 @@ def initialize_services():
     if not CONFIG: 
         app.logger.error("Cannot initialize services: Global CONFIG is not loaded.")
         return False
+        
     pcai_config = CONFIG.get('pcai_app', {})
     opsramp_cfg = pcai_config.get('opsramp', {})
     servicenow_cfg = pcai_config.get('servicenow', {})
     kb_path = pcai_config.get('knowledge_base_path', 'knowledge_base_files/')
     llm_provider_config = pcai_config.get('llm_config', {})
     ollama_cfg = llm_provider_config.get('ollama') if llm_provider_config.get('provider') == 'ollama' else None
-    services_initialized_correctly = True
+    
     try:
         opsramp_connector = OpsRampConnector(opsramp_config=opsramp_cfg, pcai_agent_id=pcai_agent_id_prefix)
         servicenow_connector = ServiceNowConnector(servicenow_config=servicenow_cfg) 
         rag_system = RAGSystem(knowledge_base_path=kb_path)
-    except Exception as e:
-        app.logger.critical(f"CRITICAL: Error initializing core connectors (OpsRamp, ServiceNow, RAG): {e}", exc_info=True)
-        services_initialized_correctly = False
-    if not ollama_cfg:
-        app.logger.warning("LLM (Ollama) configuration not found or provider not 'ollama'. LLM functionality will be disabled.")
-        llm_connector = None
-    else:
-        try:
+
+        if not ollama_cfg:
+            app.logger.warning("LLM (Ollama) configuration not found or provider not 'ollama'. LLM functionality will be disabled.")
+            llm_connector = None
+        else:
+            # The connector is now initialized without a faulty check.
+            # It will connect lazily on its first use.
             llm_connector = OllamaConnector(ollama_config=ollama_cfg)
-            if not llm_connector.client:
-                 app.logger.error("OllamaConnector client failed to initialize. LLM calls will fail.")
-        except Exception as e:
-            app.logger.critical(f"CRITICAL: Error during OllamaConnector instantiation: {e}", exc_info=True)
-            llm_connector = None 
-            services_initialized_correctly = False
-    if services_initialized_correctly:
+            app.logger.info("OllamaConnector initialized. Connection will be attempted on first API call.")
+
         app.logger.info("PCAI Services initialization attempt complete.")
-    else:
-        app.logger.error("One or more PCAI services failed to initialize correctly.")
-    return services_initialized_correctly
+        return True
+        
+    except Exception as e:
+        app.logger.critical(f"CRITICAL: Error initializing core connectors: {e}", exc_info=True)
+        return False
 
 def construct_llm_prompt(asset_id: str, live_sensor_data: dict, rag_snippets: list) -> str:
     sensor_data_summary = "\n".join([f"Asset ID: {asset_id}"] + [f"Timestamp of data: {live_sensor_data['timestamp']}"] + [

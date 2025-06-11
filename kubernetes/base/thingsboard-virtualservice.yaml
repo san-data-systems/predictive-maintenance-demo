@@ -1,0 +1,19 @@
+# kubernetes/base/thingsboard-virtualservice.yaml
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: thingsboard--vs
+spec:
+  gateways:
+  - istio-system/ezaf-gateway
+  hosts:
+  - thingsboard.hpepcai-ingress.pcai.hpecic.net
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: thingsboard-service
+        port:
+          number: 8080

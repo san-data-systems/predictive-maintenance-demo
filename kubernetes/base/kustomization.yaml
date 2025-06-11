@@ -36,4 +36,4 @@ resources:
   # ThingsBoard Application
   - thingsboard-deployment.yaml
   - thingsboard-service.yaml
-  - thingsboard-ingress.yaml
+  - thingsboard-virtualservice.yaml

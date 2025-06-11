@@ -18,33 +18,38 @@ spec:
       containers:
       - name: ollama
         image: ollama/ollama:latest
-        # --- FIX: Updated command to run server in background, pull, then wait ---
+        # --- CORRECTED STARTUP SCRIPT ---
+        # This version runs the server in the background, pulls the model,
+        # and then waits for the server process. This is the correct sequence.
         command: ["/bin/sh", "-c"]
         args:
           - |
             echo "Ollama container starting..."
-            # Start the server in the background
             ollama serve &
-            # Capture the process ID of the server
             pid=$!
             echo "Ollama server started in background with PID: $pid"
-            
-            # Wait a few seconds for the server to be ready
             sleep 5
-            
             echo "Attempting to pull model 'llama3:8b'..."
             ollama pull llama3:8b
             echo "Model pull complete."
-            
             echo "Ollama is running. Waiting for server process to exit..."
-            # Wait for the background server process. If it exits, the container will exit.
             wait $pid
-        # --- END FIX ---
+        # --- END OF CORRECTION ---
         ports:
         - containerPort: 11434
         volumeMounts:
         - name: ollama-models-storage
           mountPath: /root/.ollama
+        # The startupProbe is still essential. It tells Kubernetes to wait
+        # until the server is responsive after the model pull is complete.
+        startupProbe:
+          httpGet:
+            path: / # The root API endpoint should return OK
+            port: 11434
+          # Probe configuration gives the pod up to 5 minutes 
+          # (30 failures * 10s) to become fully ready.
+          failureThreshold: 30
+          periodSeconds: 10
         resources:
           limits:
             nvidia.com/gpu: 1

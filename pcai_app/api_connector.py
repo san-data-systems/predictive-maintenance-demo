@@ -6,10 +6,10 @@ import requests
 from requests.auth import HTTPBasicAuth
 import ollama
 import logging
+import time
 
 from utilities import get_utc_timestamp
 
-# It's good practice for each module to have its own logger
 logger = logging.getLogger(__name__)
 
 class OpsRampConnector:
@@ -37,12 +37,11 @@ class OpsRampConnector:
             logger.warning("OpsRamp config or credentials missing. OpsRamp integration will be disabled.")
             self.token_url, self.alert_url = None, None
         else:
-            # Build the URLs based on the corrected structure from OpsRamp docs
             self.token_url = f"https://{self.api_hostname}{self.token_path}"
             self.alert_url = f"https://{self.api_hostname}{self.alert_path_template.format(tenantId=self.tenant_id)}"
             
             logger.info("OpsRampConnector initialized. Ready to get token and send alerts.")
-            self.get_access_token() # Get a token on startup
+            self.get_access_token()
 
     def get_access_token(self):
         """Fetches an OAuth2 access token from OpsRamp."""
@@ -53,11 +52,7 @@ class OpsRampConnector:
             
         logger.info(f"Requesting new OpsRamp access token from {self.token_url}...")
         headers = {"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"}
-        payload = {
-            "grant_type": "client_credentials",
-            "client_id": self.api_key,
-            "client_secret": self.api_secret,
-        }
+        payload = { "grant_type": "client_credentials", "client_id": self.api_key, "client_secret": self.api_secret }
         try:
             response = requests.post(self.token_url, headers=headers, data=payload, timeout=15)
             response.raise_for_status()
@@ -76,7 +71,8 @@ class OpsRampConnector:
 
     def send_pcai_log(self, asset_id: str, log_level: str, message: str, details: dict = None):
         """
-        Formats and sends a log/event as an Alert to OpsRamp.
+        Formats and sends a log/event as an Alert to OpsRamp with all custom
+        details formatted into the main description for guaranteed visibility.
         """
         if not self.alert_url:
             logger.warning("OpsRamp alert URL not configured. Cannot send alert.")
@@ -88,68 +84,62 @@ class OpsRampConnector:
                 logger.error("Failed to refresh OpsRamp token. Aborting send.")
                 return {"status": "error", "message": "Authentication failed"}
 
-        # Mappings based on OpsRamp API requirements
-        priority_map = {"CRITICAL_ERROR": "P1", "ERROR": "P2", "WARN": "P3", "SUCCESS": "P5", "INFO": "P5"}
-        state_map = {"CRITICAL_ERROR": "CRITICAL", "ERROR": "CRITICAL", "WARN": "WARNING", "SUCCESS": "OK", "INFO": "OK"}
-        subject_prefix_map = {"RAG_RESULT": "AI RAG Log", "SUCCESS": "AI Action Success", "ERROR": "AI Action Error", "CRITICAL_ERROR": "AI Agent Critical Error"}
+        log_level_upper = log_level.upper()
+        priority_map = {"CRITICAL": "P1", "ERROR": "P2", "WARN": "P3", "INFO": "P5", "SUCCESS": "P5"}
+        state_map = {"CRITICAL": "CRITICAL", "ERROR": "CRITICAL", "WARN": "WARNING", "INFO": "OK", "SUCCESS": "OK"}
         
-        subject_prefix = subject_prefix_map.get(log_level.upper(), "AI Agent Log")
-        
-        if "LLM Diagnosis" in message:
-            subject = f"AI Diagnosis ({asset_id}): {details.get('summary', 'Details in description')[:150]}"
-        else:
-            subject = f"{subject_prefix}: {message[:150]}"
+        # Add a unique timestamp to the subject to bypass OpsRamp's de-duplication
+        timestamp_for_subject = get_utc_timestamp()
+        subject = f"AI Agent Log ({log_level_upper}): {message[:120]} - {timestamp_for_subject}"
 
-        # This is the single alert object
-        alert_object = {
-            "resourceId": self.turbine_resource_id,
-            "subject": subject,
-            "currentState": state_map.get(log_level.upper(), "OK"),
-            "priority": priority_map.get(log_level.upper(), "P5"),
-            "app": "Custom",
-            "serviceName": self.turbine_resource_id, # Using the resource ID as a stable service identifier
-            "customFields": [
-                {"name": "ai_agent_log_level", "value": log_level.upper()},
-                {"name": "ai_agent_message", "value": message}
-            ]
-        }
+        # Build a detailed description string for guaranteed visibility
+        description_parts = [message]
         if details:
+            description_parts.append("\n\n--- AI Diagnosis Details ---")
             for key, value in details.items():
-                field_value = json.dumps(value, default=str) if isinstance(value, (dict, list)) else str(value)
-                alert_object["customFields"].append({"name": key, "value": field_value})
-        
-        # The OpsRamp API expects a list of alerts, even if there's only one.
-        payload = [alert_object]
+                clean_key = key.replace('_', ' ').title()
+                field_value = json.dumps(value, indent=2) if isinstance(value, (dict, list)) else str(value)
+                description_parts.append(f"\n{clean_key}: {field_value}")
+        full_description = "\n".join(description_parts)
 
+        # This payload structure is based on the official OpsRamp API documentation
+        alert_object = {
+            "subject": subject,
+            "currentState": state_map.get(log_level_upper, "OK"),
+            "priority": priority_map.get(log_level_upper, "P5"),
+            "description": full_description,
+            "device": {
+                "resourceUUID": self.turbine_resource_id
+            },
+            "app": "Custom",
+            "serviceName": asset_id
+        }
+        
+        payload = [alert_object]
         headers = {"Authorization": f"Bearer {self.access_token}", "Content-Type": "application/json", "Accept": "application/json"}
+        
         try:
-            logger.info(f"Sending alert to OpsRamp with state '{alert_object['currentState']}': {subject}")
+            logger.info(f"Sending alert to OpsRamp with state '{alert_object['currentState']}'")
             response = requests.post(self.alert_url, headers=headers, json=payload, timeout=15)
-            
-            if response.status_code in [200, 201, 202, 204]:
-                logger.info(f"Successfully sent alert to OpsRamp. Status: {response.status_code}")
-                return {"status": "success"}
-            else:
-                # Handle potential token expiration (401 Unauthorized)
-                if response.status_code == 401:
-                    logger.warning("OpsRamp token may have expired. Retrying after refresh.")
-                    if self.get_access_token():
-                        headers["Authorization"] = f"Bearer {self.access_token}"
-                        response = requests.post(self.alert_url, headers=headers, json=payload, timeout=15)
-                        response.raise_for_status()
-                        logger.info("Successfully sent alert to OpsRamp after token refresh.")
-                        return {"status": "success"}
-                # For any other error, raise it to be caught by the generic exception block
-                response.raise_for_status()
-            
+            response.raise_for_status()
+            logger.info(f"Successfully sent alert to OpsRamp. Status: {response.status_code}")
+            return {"status": "success"}
         except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                logger.warning("OpsRamp token may have expired. Retrying after refresh.")
+                if self.get_access_token():
+                    headers["Authorization"] = f"Bearer {self.access_token}"
+                    response = requests.post(self.alert_url, headers=headers, json=payload, timeout=15)
+                    response.raise_for_status()
+                    logger.info("Successfully sent alert to OpsRamp after token refresh.")
+                    return {"status": "success"}
             logger.error(f"Error sending alert to OpsRamp. Status: {e.response.status_code}, Body: {e.response.text[:500]}", exc_info=True)
             return {"status": "error", "message": f"HTTP Error: {e.response.status_code}"}
         except requests.exceptions.RequestException as e:
             logger.error(f"Error sending alert to OpsRamp: {e}", exc_info=True)
             return {"status": "error", "message": str(e)}
 
-# --- The ServiceNowConnector and OllamaConnector classes below are unchanged ---
+
 class ServiceNowConnector:
     def __init__(self, servicenow_config: dict):
         self.instance_hostname = servicenow_config.get("instance_hostname")
@@ -193,29 +183,65 @@ class ServiceNowConnector:
 
 
 class OllamaConnector:
+    """
+    Connects to an Ollama server to perform LLM-based diagnosis.
+    Includes a retry mechanism to handle slow-starting dependencies.
+    """
     def __init__(self, ollama_config: dict):
         self.model_name = ollama_config.get("model_name", "llama3:8b")
         self.api_base_url = ollama_config.get("api_base_url", "http://localhost:11434")
         self.request_timeout = int(ollama_config.get("request_timeout_seconds", 180))
+        
         self.client = None
-        try:
-            self.client = ollama.Client(host=self.api_base_url, timeout=self.request_timeout)
-            self.client.list(); logger.info(f"OllamaConnector initialized. Model: {self.model_name}, API Base: {self.api_base_url}. Connection successful.")
-        except Exception as e:
-            logger.error(f"Failed to initialize or connect Ollama client at {self.api_base_url}: {e}. Ensure Ollama server is running and model is pulled.", exc_info=True)
-            self.client = None
+        self.max_retries = 5
+        self.retry_delay_seconds = 15
+        logger.info(f"OllamaConnector configured for model '{self.model_name}'. Connection will be established on first use.")
+
+    def _get_client(self):
+        """
+        Gets a connected Ollama client, retrying if necessary.
+        This makes the connection lazy and resilient.
+        """
+        if self.client:
+            try:
+                self.client.list()
+                return self.client
+            except Exception:
+                logger.warning("Existing Ollama client connection lost. Attempting to reconnect.")
+                self.client = None
+
+        for attempt in range(self.max_retries):
+            try:
+                logger.info(f"Attempting to connect to Ollama at {self.api_base_url} (Attempt {attempt + 1}/{self.max_retries})...")
+                client_instance = ollama.Client(host=self.api_base_url, timeout=self.request_timeout)
+                client_instance.list()
+                logger.info("Successfully connected to Ollama.")
+                self.client = client_instance
+                return self.client
+            except Exception as e:
+                logger.warning(f"Ollama connection attempt failed: {e}")
+                if attempt < self.max_retries - 1:
+                    logger.info(f"Retrying in {self.retry_delay_seconds} seconds...")
+                    time.sleep(self.retry_delay_seconds)
+                else:
+                    logger.error("All retry attempts to connect to Ollama have failed.")
+                    return None
+        return None
 
     def generate_structured_diagnosis(self, prompt: str) -> dict:
-        if not self.client:
-            logger.error("Ollama client not initialized. Cannot generate diagnosis.")
-            return {"error": "Ollama client not initialized", "raw_output": ""}
+        client = self._get_client()
+        if not client:
+            logger.error("Ollama client not available. Cannot generate diagnosis.")
+            return {"error": "Ollama client not available", "raw_output": ""}
+        
         logger.info(f"Sending prompt to Ollama model: {self.model_name} (Prompt length: {len(prompt)} chars)")
         llm_output_str = ""
         try:
-            response = self.client.generate(model=self.model_name, prompt=prompt, format="json", options={"temperature": 0.2, "num_predict": 1024})
+            response = client.generate(model=self.model_name, prompt=prompt, format="json", options={"temperature": 0.2, "num_predict": 1024})
             llm_output_str = response.get('response', '{}')
             logger.debug(f"Ollama raw JSON string response: {llm_output_str}")
-            parsed_response = json.loads(llm_output_str); logger.info("Successfully parsed JSON response from Ollama.")
+            parsed_response = json.loads(llm_output_str)
+            logger.info("Successfully parsed JSON response from Ollama.")
             return parsed_response
         except json.JSONDecodeError as e:
             logger.error(f"Ollama response was not valid JSON: {e}. Raw output (first 500 chars): '{llm_output_str[:500]}'")

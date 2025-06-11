@@ -8,6 +8,7 @@ import logging
 import time
 
 from utilities import get_utc_timestamp, load_app_config, get_full_config
+from pcai_app.api_connector import OpsRampConnector
 
 logger = logging.getLogger(__name__)
 
@@ -15,40 +16,47 @@ class ArubaEdgeSimulator:
     """
     Simulates an Aruba Edge device that processes sensor data,
     detects gross anomalies, and sends alerts/triggers via actual HTTP calls.
+    It is stateful to prevent alert storms to OpsRamp.
     """
     def __init__(self):
         self.config = load_app_config('aruba_edge_simulator')
         if not self.config:
             raise ValueError("Failed to load 'aruba_edge_simulator' configuration section.")
 
-        full_cfg_for_globals = get_full_config()
-        company_name = full_cfg_for_globals.get('company_name_short', 'DefaultCo')
+        full_cfg = get_full_config()
+        company_name = full_cfg.get('company_name_short', 'DefaultCo')
         
         template = self.config.get('device_id_template')
         num = self.config.get('default_device_id_num')
-        if not template or num is None:
-             raise KeyError("Missing 'device_id_template' or 'default_device_id_num' in config.")
         self.device_id = template.format(company_name_short=company_name, id=num)
             
         self.thresholds = self.config.get('thresholds')
         if not self.thresholds:
             raise KeyError("Missing 'thresholds' in config.")
-
-        opsramp_cfg = self.config.get('opsramp', {})
-        self.opsramp_metrics_endpoint = opsramp_cfg.get('metrics_endpoint')
-        self.opsramp_events_endpoint = opsramp_cfg.get('events_endpoint')
         
         self.pcai_trigger_endpoint = os.environ.get(
             'PCAI_AGENT_TRIGGER_ENDPOINT', 
             self.config.get('pcai_agent_trigger_endpoint')
         )
-        if not self.pcai_trigger_endpoint:
-            raise KeyError("Missing 'pcai_agent_trigger_endpoint' in config or environment variable.")
+
+        # Add state to track if an alert is already active
+        self.is_alert_active = False
+
+        # Initialize the OpsRamp Connector to send real alerts
+        opsramp_cfg = full_cfg.get('pcai_app', {}).get('opsramp', {})
+        self.opsramp_connector = OpsRampConnector(opsramp_config=opsramp_cfg, pcai_agent_id=self.device_id)
+        if not self.opsramp_connector.token_url:
+            print(f"WARN: [{self.device_id}] OpsRamp connector not fully configured. Real API calls to OpsRamp will be disabled.")
+            self.opsramp_connector = None
+        else:
+            print(f"INFO: [{self.device_id}] OpsRamp Connector Initialized. Will send REAL alerts.")
 
         print(f"INFO: [{self.device_id}] Aruba Edge Simulator logic initialized.")
         print(f"INFO: [{self.device_id}] PCAI Trigger Endpoint (Actual HTTP): {self.pcai_trigger_endpoint}")
 
+
     def _make_actual_api_call(self, endpoint: str, payload: dict, method: str = "POST"):
+        """Makes an actual HTTP API call to the PCAI Agent."""
         print(f"\n--- MAKING ACTUAL HTTP API CALL [{method}] ---")
         print(f"To Endpoint: {endpoint}")
         print(f"Payload:\n{json.dumps(payload, indent=2)}")
@@ -56,17 +64,13 @@ class ArubaEdgeSimulator:
         response_summary = {"status": "error", "message": "Call not attempted or unknown error"}
         try:
             if method.upper() == "POST":
-                response = requests.post(endpoint, json=payload, timeout=300)
+                response = requests.post(endpoint, json=payload, timeout=10)
             else:
-                print(f"ERROR: Unsupported HTTP method '{method}' for API call.")
                 return {"status": "error", "message": f"Unsupported HTTP method: {method}"}
 
             response.raise_for_status() 
             print(f"SUCCESS: API Call to {endpoint} successful. Status: {response.status_code}")
-            try:
-                response_summary = {"status": "success", "response_data": response.json(), "status_code": response.status_code}
-            except requests.exceptions.JSONDecodeError: 
-                response_summary = {"status": "success", "response_data": response.text, "status_code": response.status_code}
+            response_summary = {"status": "success", "response_data": response.text, "status_code": response.status_code}
         except requests.exceptions.RequestException as e:
             print(f"ERROR: API Call to {endpoint} failed: {e}")
             response_summary = {"status": "error", "message": str(e)}
@@ -74,76 +78,42 @@ class ArubaEdgeSimulator:
             print(f"--- END ACTUAL HTTP API CALL (Status: {response_summary.get('status')}) ---")
         return response_summary
 
-    def _send_metrics_to_opsramp(self, sensor_data: dict):
-        metrics_payload = {
-            "source_device_id": self.device_id,
-            "asset_id": sensor_data["asset_id"],
-            "timestamp": sensor_data["timestamp"],
-            "metrics": {
-                "temperature_c": sensor_data.get("temperature_c"),
-                "temperature_increase_c": sensor_data.get("temperature_increase_c"),
-                "vibration_overall_amplitude_g": sensor_data.get("vibration_overall_amplitude_g"),
-                "vibration_dominant_frequency_hz": sensor_data.get("vibration_dominant_frequency_hz"),
-                "acoustic_overall_db": sensor_data.get("acoustic_overall_db"),
-                "acoustic_critical_band_db": sensor_data.get("acoustic_critical_band_db"),
-            }
-        }
-        if sensor_data.get("vibration_anomaly_signature_freq_hz") is not None:
-            metrics_payload["metrics"]["vibration_anomaly_signature_freq_hz"] = sensor_data["vibration_anomaly_signature_freq_hz"]
-            metrics_payload["metrics"]["vibration_anomaly_signature_amp_g"] = sensor_data["vibration_anomaly_signature_amp_g"]
-        print(f"\n--- SIMULATING API CALL [POST] (OpsRamp Metrics) ---")
-        print(f"To Endpoint: {self.opsramp_metrics_endpoint}")
-        print(f"Payload:\n{json.dumps(metrics_payload, indent=2)}")
-        print(f"--- END SIMULATED API CALL ---")
-
     def _detect_gross_anomalies(self, sensor_data: dict) -> list:
-        # --- FIX: Restored full dictionary definitions ---
+        """Safely checks sensor data against configured thresholds."""
         detected_anomalies = []
         if sensor_data.get("temperature_c", 0) > self.thresholds.get("temperature_critical_c", 999):
             detected_anomalies.append({
                 "type": "CriticalTemperature",
-                "message": f"Temperature {sensor_data['temperature_c']}°C exceeds threshold of {self.thresholds['temperature_critical_c']}°C.",
-                "value": sensor_data["temperature_c"], "threshold": self.thresholds["temperature_critical_c"]
+                "message": f"Temperature {sensor_data['temperature_c']}°C exceeds threshold."
             })
-        if sensor_data.get("vibration_anomaly_signature_amp_g") is not None and \
-           sensor_data["vibration_anomaly_signature_amp_g"] > self.thresholds.get("vibration_anomaly_amp_g", 999):
+        
+        anomaly_amp = sensor_data.get("vibration_anomaly_signature_amp_g")
+        if anomaly_amp is not None and anomaly_amp > self.thresholds.get("vibration_anomaly_amp_g", 999):
+            anomaly_freq = sensor_data.get('vibration_anomaly_signature_freq_hz', 'N/A')
             detected_anomalies.append({
                 "type": "HighAmplitudeVibrationSignature",
-                "message": (f"Vibration anomaly signature {sensor_data['vibration_anomaly_signature_amp_g']}g "
-                            f"at {sensor_data['vibration_anomaly_signature_freq_hz']}Hz "
-                            f"exceeds threshold of {self.thresholds['vibration_anomaly_amp_g']}g."),
-                "anomaly_frequency_hz": sensor_data['vibration_anomaly_signature_freq_hz'],
-                "anomaly_amplitude_g": sensor_data['vibration_anomaly_signature_amp_g'],
-                "threshold_amp_g": self.thresholds['vibration_anomaly_amp_g']
-            })
-        if sensor_data.get("acoustic_critical_band_db", 0) > self.thresholds.get("acoustic_critical_band_db", 999):
-            detected_anomalies.append({
-                "type": "AnomalousAcousticCriticalBand",
-                "message": f"Acoustic critical band {sensor_data['acoustic_critical_band_db']}dB exceeds threshold of {self.thresholds['acoustic_critical_band_db']}dB.",
-                "value_db": sensor_data["acoustic_critical_band_db"], "threshold_db": self.thresholds['acoustic_critical_band_db']
+                "message": f"Vibration anomaly {anomaly_amp}g at {anomaly_freq}Hz exceeds threshold."
             })
         return detected_anomalies
         
     def _send_event_to_opsramp(self, sensor_data: dict, anomaly_details: dict):
-        event_title = f"Anomalous {anomaly_details['type']} detected on {sensor_data['asset_id']}"
-        if anomaly_details['type'] == "HighAmplitudeVibrationSignature": 
-             event_title = f"Anomalous vibration pattern detected on {sensor_data['asset_id']}"
-        event_payload = {
-            "source_id": self.device_id, 
-            "resource_id": sensor_data["asset_id"], 
-            "timestamp": get_utc_timestamp(), 
-            "severity": "CRITICAL", 
-            "title": event_title,
-            "description": f"Edge logic: {anomaly_details['message']} Escalating to PCAI.",
-            "details": {"triggering_anomaly": anomaly_details, "sensor_readings": sensor_data}
-        }
-        print(f"ALERT: [{self.device_id}] Sending CRITICAL EVENT to OpsRamp: {event_payload['title']}")
-        print(f"\n--- SIMULATING API CALL [POST] (OpsRamp Event) ---")
-        print(f"To Endpoint: {self.opsramp_events_endpoint}")
-        print(f"Payload:\n{json.dumps(event_payload, indent=2)}")
-        print(f"--- END SIMULATED API CALL ---")
+        """Sends a single, real CRITICAL alert to OpsRamp."""
+        if not self.opsramp_connector:
+            print("INFO: OpsRamp connector not configured, skipping alert.")
+            return
+
+        event_title = f"Edge Detection: {anomaly_details['type']} on {sensor_data['asset_id']}"
+        description = f"Edge logic: {anomaly_details['message']} Escalating to PCAI."
+        
+        self.opsramp_connector.send_pcai_log(
+            asset_id=sensor_data["asset_id"],
+            log_level="CRITICAL",
+            message=event_title,
+            details={"triggering_anomaly": anomaly_details}
+        )
 
     def _send_trigger_to_pcai(self, sensor_data: dict, all_detected_anomalies: list):
+        """Sends the trigger payload to the PCAI Agent application."""
         pcai_trigger_payload = {
             "source_component": self.device_id, 
             "asset_id": sensor_data["asset_id"],
@@ -155,17 +125,29 @@ class ArubaEdgeSimulator:
         self._make_actual_api_call(self.pcai_trigger_endpoint, pcai_trigger_payload, method="POST")
 
     def process_sensor_data(self, sensor_data: dict):
-        print(f"\nINFO: [{self.device_id}] Processing data for {sensor_data['asset_id']} at {sensor_data['timestamp']}")
-        self._send_metrics_to_opsramp(sensor_data)
+        """
+        Main processing logic. Detects anomalies and sends alerts only when the state changes.
+        """
         anomalies = self._detect_gross_anomalies(sensor_data)
-        if anomalies:
-            print(f"WARN: [{self.device_id}] Gross anomalies DETECTED for {sensor_data['asset_id']}:")
-            for anomaly in anomalies: 
-                print(f"  - Type: {anomaly['type']}, Message: {anomaly['message']}")
+        
+        if anomalies and not self.is_alert_active:
+            # If we find anomalies AND an alert is not already active...
+            self.is_alert_active = True # Set the flag to prevent re-alerting
+            print(f"WARN: [{self.device_id}] NEW Gross anomaly detected. State set to ACTIVE.")
+            # Send one alert to OpsRamp and one trigger to PCAI
             self._send_event_to_opsramp(sensor_data, anomalies[0])
             self._send_trigger_to_pcai(sensor_data, anomalies)
+
+        elif not anomalies and self.is_alert_active:
+            # If data is normal AND an alert was previously active, reset the flag
+            self.is_alert_active = False
+            print(f"INFO: [{self.device_id}] Anomaly condition cleared. State set to INACTIVE.")
+            # Optionally, send a "CLEAR" event to OpsRamp here
+        
         else:
-            print(f"INFO: [{self.device_id}] Data for {sensor_data['asset_id']} within normal edge parameters.")
+            # Otherwise, just log that we are processing normally
+            status = "Anomalous" if self.is_alert_active else "Normal"
+            print(f"INFO: [{self.device_id}] Data for {sensor_data['asset_id']} processed. Current State: {status}")
 
 if __name__ == "__main__":
     config = get_full_config()
@@ -186,7 +168,7 @@ if __name__ == "__main__":
     def on_connect(client, userdata, flags, reason_code, properties):
         if reason_code.is_failure:
             print(f"Failed to connect to MQTT Broker: {reason_code}. Exiting.")
-            os._exit(1)
+            os._exit(1) # Use os._exit in a threaded context to force exit
         else:
             print(f"Successfully connected to MQTT Broker. Subscribing to topic: '{topic}'")
             client.subscribe(topic)

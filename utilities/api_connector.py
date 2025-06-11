@@ -49,10 +49,10 @@ class OpsRampConnector:
             logger.error("Cannot get OpsRamp token, configuration or credentials missing.")
             self.access_token = None
             return False
-            
+        
         logger.info(f"Requesting new OpsRamp access token from {self.token_url}...")
         headers = {"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"}
-        payload = { "grant_type": "client_credentials", "client_id": self.api_key, "client_secret": self.api_secret }
+        payload = {"grant_type": "client_credentials", "client_id": self.api_key, "client_secret": self.api_secret}
         try:
             response = requests.post(self.token_url, headers=headers, data=payload, timeout=15)
             response.raise_for_status()
@@ -71,8 +71,8 @@ class OpsRampConnector:
 
     def send_pcai_log(self, asset_id: str, log_level: str, message: str, details: dict = None):
         """
-        Formats and sends a log/event as an Alert to OpsRamp, using the correct
-        'customFields' payload as an array of structured objects.
+        Formats and sends a log/event as an Alert to OpsRamp.
+        Puts all details directly into the description in human-readable form.
         """
         if not self.alert_url:
             logger.warning("OpsRamp alert URL not configured. Cannot send alert.")
@@ -87,47 +87,38 @@ class OpsRampConnector:
         log_level_upper = log_level.upper()
         priority_map = {"CRITICAL": "P1", "ERROR": "P2", "WARN": "P3", "INFO": "P5", "SUCCESS": "P5"}
         state_map = {"CRITICAL": "CRITICAL", "ERROR": "CRITICAL", "WARN": "WARNING", "INFO": "OK", "SUCCESS": "OK"}
-        
-        timestamp_for_subject = get_utc_timestamp()
-        subject = f"AI Agent Log ({log_level_upper}): {message[:120]} - {timestamp_for_subject}"
 
-        # --- FINAL FIX: Create a 'customFields' list of OBJECTS with name/value pairs ---
-        custom_fields_list = []
+        current_state = state_map.get(log_level_upper, "OK")
+        timestamp_subject = get_utc_timestamp()
+        subject = f"AI Agent Log ({current_state}): {message[:120]} - {timestamp_subject}"
+
+        # Build a human-readable description with all details
+        description_lines = [f"{message}", "", "Details:"]
         if details:
             for key, value in details.items():
-                # Ensure the value is a simple string for the 'value' field
-                if isinstance(value, list):
-                    value_str = ", ".join(map(str, value))
-                elif isinstance(value, dict):
+                # Format nested structures nicely
+                if isinstance(value, dict) or isinstance(value, list):
                     value_str = json.dumps(value)
                 else:
                     value_str = str(value)
-                
-                # Create the object with 'name' and 'value' keys and append it to the list
-                custom_fields_list.append({
-                    "name": key,
-                    "value": value_str
-                })
-        # --- END OF FIX ---
-        
-        description = f"{message}\n\nSee custom fields for detailed diagnostic data."
+                description_lines.append(f"- {key}: {value_str}")
+        description = "\n".join(description_lines)
 
         alert_object = {
             "subject": subject,
-            "currentState": state_map.get(log_level_upper, "OK"),
+            "currentState": current_state,
             "priority": priority_map.get(log_level_upper, "P5"),
             "description": description,
-            "customFields": custom_fields_list,
-            "device": {
-                "resourceUUID": self.turbine_resource_id
-            },
+            # leave customFields empty since details moved to description
+            "customFields": [],
+            "device": {"resourceUUID": self.turbine_resource_id},
             "app": "Custom",
             "serviceName": asset_id
         }
-        
+
         payload = [alert_object]
         headers = {"Authorization": f"Bearer {self.access_token}", "Content-Type": "application/json", "Accept": "application/json"}
-        
+
         try:
             logger.info(f"Sending alert to OpsRamp with payload: {json.dumps(payload)}")
             response = requests.post(self.alert_url, headers=headers, json=payload, timeout=15)

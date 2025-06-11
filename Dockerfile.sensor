@@ -14,7 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the application code and config
 COPY ./data_simulators ./data_simulators
-COPY ./config/demo_config.yaml ./config/demo_config.yaml
+# IMPORTANT: Copy demo_config.yaml to a known absolute path inside the container.
+# This ensures common_utils.py can find it reliably.
+COPY ./config/demo_config.yaml /app/config/demo_config.yaml 
 
 # Ensure logs are not buffered and appear in real-time
 ENV PYTHONUNBUFFERED=1

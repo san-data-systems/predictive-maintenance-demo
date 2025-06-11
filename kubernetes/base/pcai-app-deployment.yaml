@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: pcai-app
-        image: sdsajoshi/pcai-app:latest # IMPORTANT: Replace with your image
+        image: sdsajoshi/pcai-app:latest # IMPORTANT: Replace with your built image tag
         ports:
         - containerPort: 5000
         resources:
@@ -29,21 +29,29 @@ spec:
         # Inject credentials from K8s Secrets into the container as environment variables
         envFrom:
         - secretRef:
-            name: pcai-app-credentials # For ServiceNow
+            name: pcai-app-credentials # For ServiceNow (includes API_USER, API_PASSWORD)
         - secretRef:
-            name: opsramp-credentials  # For OpsRamp
+            name: opsramp-credentials   # For OpsRamp (includes TENANT_ID, API_KEY, API_SECRET)
         volumeMounts:
         - name: config-volume
           mountPath: /app/config
         - name: kb-volume
-          mountPath: /app/knowledge_base_files
+          mountPath: /app/knowledge_base_files # This is the directory RAGSystem expects
       volumes:
       - name: config-volume
         configMap:
           name: pcai-app-config
           items:
             - key: demo_config.yaml
-              path: demo_config.yaml
+              path: demo_config.yaml # Mounts demo_config.yaml into /app/config/demo_config.yaml
       - name: kb-volume
         configMap:
           name: pcai-app-config
+          # NEW: Explicitly define which items from the ConfigMap should go into kb-volume
+          items:
+            - key: technical_manual_extracts.txt
+              path: technical_manual_extracts.txt
+            - key: turbine_repair_history_logs.txt
+              path: turbine_repair_history_logs.txt
+            - key: expert_technician_notes.txt
+              path: expert_technician_notes.txt

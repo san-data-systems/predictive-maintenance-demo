@@ -12,10 +12,17 @@ COPY ./utilities ./utilities
 COPY ./requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the PCAI application code and its dependencies
+# Copy the PCAI application code
 COPY ./pcai_app ./pcai_app
-COPY ./knowledge_base_files ./knowledge_base_files
-COPY ./config/demo_config.yaml ./config/demo_config.yaml
+
+# IMPORTANT: Copy knowledge_base_files to a known absolute path.
+# This assumes your RAGSystem is configured to look for this path.
+COPY ./knowledge_base_files /app/knowledge_base_files 
+
+# IMPORTANT: Copy demo_config.yaml to a known absolute path.
+# This ensures common_utils.py can find it reliably.
+COPY ./config/demo_config.yaml /app/config/demo_config.yaml 
+
 
 EXPOSE 5000
 

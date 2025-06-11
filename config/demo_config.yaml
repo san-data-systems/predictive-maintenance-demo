@@ -1,5 +1,3 @@
-# config/demo_config.yaml
-
 # ----------------------------------------------------------------------
 # Configuration for the AI-Driven Predictive Maintenance Demo
 # ----------------------------------------------------------------------
@@ -13,7 +11,7 @@ company_name_short: "DemoCorp"
 mqtt:
   host: "localhost"
   port: 1883
-  sensor_topic: "hpe/demo/turbine/007/sensors"
+  sensor_topic: "hpe/demo/turbine/007/sensors" # The topic for sensor data sent to the edge simulator
 
 # --- ThingsBoard IoT Platform MQTT Configuration ---
 thingsboard:
@@ -21,36 +19,72 @@ thingsboard:
   port: 1884
   # FIX: You MUST replace this placeholder with the real token from your
   # ThingsBoard device's "Access token" field.
-  device_token: "VeoL2kBuBjrtv8Bqb9hK"
+  device_token: "VeoL2kBuBjrtv8Bqb9hK" # Example token - REPLACE THIS WITH YOUR ACTUAL TOKEN
 
 # --- IoT Sensor Simulator Settings ---
 iot_sensor_simulator:
-  asset_id_prefix: "{company_name_short}_Turbine"
-  default_asset_number: 7
-  data_interval_seconds: 5 # Increased for easier log reading during debug
-  base_temp_c: 42.0
-  vibration_normal_range: [0.1, 0.5]
-  acoustic_normal_range: [20.0, 35.0]
-  anomaly_start_chance: 0.15
-  anomaly_stop_chance: 0.4
-  anomaly_vibration_factor: 10.0
+  asset_id_prefix: "{company_name_short}_Turbine" # CORRECTED TYPO: 'aasset_id_prefix' -> 'asset_id_prefix'
+  default_asset_number: 007                      # Specific number for the turbine asset (e.g., 007 -> DemoCorp_Turbine007)
+  
+  # Timing and probability for the anomaly cycle (ADJUSTED FOR VERY SHORT DEMO CYCLE)
+  data_interval_seconds: 2                       # Time between each data point generation (REDUCED SIGNIFICANTLY for rapid demo)
+  initial_normal_ticks: 3                        # Number of initial intervals to guarantee 'normal' operation (REDUCED further)
+  anomaly_ramp_duration_ticks: 4                 # Intervals for gradual ramp-up/ramp-down to/from anomaly (REDUCED further)
+  hold_duration_ticks: 5                         # Intervals the anomaly state persists at its peak (REDUCED further)
+  anomaly_start_chance: 0.15                     # Probability (0.0-1.0) of an anomaly starting AFTER the initial normal period.
+
+  # Normal operating ranges for the sensor metrics
+  vibration_normal_range: [0.1, 0.5]             # Normal range for vibration (g). Values will jitter around the midpoint.
+  acoustic_normal_range: [20.0, 35.0]            # Normal range for acoustic (dB).
+  base_temp_c: 42.0                              # Base temperature (°C) for normal operation.
+
+  # Normal Jitter Settings (Gaussian noise for natural fluctuations)
+  normal_jitter_std_dev_vib: 0.02                # Standard deviation for individual vibration noise (g)
+  normal_jitter_std_dev_temp: 0.2                # Standard deviation for individual temperature noise (°C)
+  normal_jitter_std_dev_acou: 0.5                # Standard deviation for individual acoustic noise (dB)
+
+  # Common influence factor for normal jitter (for subtle correlation between metrics)
+  common_normal_jitter_std_dev: 0.005            # Standard deviation for the common random component
+  common_normal_jitter_influence_scale_vib: 1.0  # Scale for common influence on vibration
+  common_normal_jitter_influence_scale_temp: 10.0 # Scale for common influence on temperature (temp often reacts more)
+  common_normal_jitter_influence_scale_acou: 5.0 # Scale for common influence on acoustic
+
+  # Multiplier for jitter during anomaly phases (makes data look more chaotic during failure)
+  anomaly_jitter_factor: 2.0                     # Multiplier for normal_jitter_std_dev during ramp-up/down/hold phases
+
+  # Specific anomaly frequencies for vibration (decoupled from amplitude).
+  # These are critical for demos where anomaly detection is based on specific frequency thresholds.
+  anomaly_dominant_frequency_hz: 121.0           # Dominant frequency reported during anomaly (e.g., visible in ThingsBoard chart)
+  anomaly_signature_frequency_hz: 121.38         # Specific signature frequency for LLM context lookup
 
 # --- Aruba Edge Simulator Settings ---
+# This section defines thresholds and behavior for the edge device to detect anomalies.
 aruba_edge_simulator:
-  device_id_template: "Edge_Sim_{company_name_short}_Node{id:03d}"
-  default_device_id_num: 1
+  device_id_template: "Edge_Sim_{company_name_short}_Node{id:03d}" # Template for edge device ID
+  default_device_id_num: 1                         # Specific ID for the edge device
+  # The endpoint where the edge simulator sends anomaly triggers to the PCAI Agent
   pcai_agent_trigger_endpoint: "http://localhost:5000/api/v1/analyze_trigger"
+  
+  # Thresholds for gross anomaly detection by the edge simulator
   thresholds:
-    temperature_critical_c: 55.0
-    vibration_anomaly_amp_g: 1.5 
-    acoustic_critical_band_db: 70.0
+    # Temperature threshold (e.g., if above 55C, it's critical)
+    # Simulator's anomaly peak is ~57C.
+    temperature_critical_c: 55 
+
+    # Vibration dominant frequency threshold (e.g., if above 120Hz, it's critical)
+    # Simulator's anomaly frequency is 121Hz.
+    vibration_anomaly_freq_hz: 120 
+
+    # Vibration overall amplitude threshold (e.g., if above 1.5g, it's critical)
+    # Simulator's vibration overall amplitude goes up to 2.5g by default config.
+    vibration_amplitude_gross_g: 1.5 
 
 # --- PCAI Agent Application Settings ---
 pcai_app:
   agent_id_prefix_template: "PCAI_Agent_{company_name_short}" 
   listen_host: "0.0.0.0"
   listen_port: 5000
-  knowledge_base_path: "knowledge_base_files" # Use relative path for local run
+  knowledge_base_path: "/app/knowledge_base_files" # Use relative path for local run
   
   llm_config:
     provider: "ollama" 
@@ -64,12 +98,13 @@ pcai_app:
     env_var_api_key: "OPSRAMP_API_KEY"
     env_var_api_secret: "OPSRAMP_API_SECRET"
     api_hostname: "hpekaops.api.pov.opsramp.com"
-    token_endpoint_path: "/tenancy/auth/oauth/token"
-    alert_endpoint_path: "/api/v2/tenants/{tenantId}/alerts"
-    turbine_resource_id: "957836fe-7986-46da-bc28-b5d5cca08c85"
+    token_endpoint_path: "/tenancy/auth/oauth/token" # <--- ENSURE THIS LINE IS EXACTLY AS SHOWN
+    # CORRECTED: OpsRamp custom alerts endpoint path
+    alert_endpoint_path: "/api/v2/tenants/{tenantId}/alerts" 
+    turbine_resource_id: "957836fe-7986-46da-bc28-b5d5cca08c85" # REPLACE WITH YOUR OPSRAMP RESOURCE ID
 
   servicenow:
-    instance_hostname: "dev194183.service-now.com"
+    instance_hostname: "dev194183.service-now.com" # REPLACE WITH YOUR SERVICENOW INSTANCE
     env_var_api_user: "SERVICENOW_API_USER"
     env_var_api_password: "SERVICENOW_API_PASSWORD"
     target_table: "incident"

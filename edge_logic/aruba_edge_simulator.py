@@ -8,7 +8,7 @@ import logging
 import time
 
 from utilities.common_utils import get_utc_timestamp, load_app_config, get_full_config
-from utilities.api_connector import OpsRampConnector # Corrected import after decoupling
+from utilities.api_connector import OpsRampConnector
 
 # Configure logging for the module
 logger = logging.getLogger(__name__)
@@ -27,10 +27,8 @@ class ArubaEdgeSimulator:
         company_name = full_cfg.get('company_name_short', 'DefaultCo')
         template = self.config.get('device_id_template')
         num = self.config.get('default_device_id_num')
-        # Corrected: Use .format() with keyword arguments for robust template
         self.device_id = template.format(company_name_short=company_name, id=num) 
 
-        # Ensure thresholds are loaded from config, with safe defaults
         self.thresholds = self.config.get('thresholds', {}) 
         if not self.thresholds:
             logger.warning("Missing 'thresholds' section in aruba_edge_simulator config. Using default detection thresholds.")
@@ -63,12 +61,11 @@ class ArubaEdgeSimulator:
         logger.info(f"--- MAKING ACTUAL HTTP API CALL [{method}] ---")
         logger.info(f"To Endpoint: {endpoint}")
         try:
-            # Increased timeout for LLM first-call latency
             response = requests.post(endpoint, json=payload, timeout=60) 
             response.raise_for_status() 
             logger.info(f"SUCCESS: API Call to {endpoint}. Status: {response.status_code}")
         except requests.exceptions.RequestException as e:
-            logger.error(f"ERROR: API Call to {endpoint} failed: {e}") # Use logger.error
+            logger.error(f"ERROR: API Call to {endpoint} failed: {e}")
         finally:
             logger.info(f"--- END ACTUAL HTTP API CALL ---")
 
@@ -108,7 +105,7 @@ class ArubaEdgeSimulator:
             logger.info("OpsRamp connector disabled or not configured. Skipping alert.")
             return
         
-        title = f"Edge Detection: {anomaly['type']} on {sensor_data['assetId']}" # Use 'assetId'
+        title = f"Edge Detection: {anomaly['type']} on {sensor_data['assetId']}"
         message_details = {
             "triggering_anomaly": anomaly,
             "sensor_data_snapshot": {
@@ -120,7 +117,7 @@ class ArubaEdgeSimulator:
         }
         
         self.opsramp_connector.send_pcai_log(
-            asset_id=sensor_data["assetId"], # Use 'assetId'
+            asset_id=sensor_data["assetId"],
             log_level="CRITICAL",
             message=title,
             details=message_details
@@ -130,7 +127,7 @@ class ArubaEdgeSimulator:
         """Sends a detailed trigger payload to the PCAI Agent for deeper analysis."""
         payload = {
             "source_component": self.device_id,
-            "asset_id": sensor_data.get("assetId"), # Use 'assetId'
+            "asset_id": sensor_data.get("assetId"),
             "trigger_timestamp": get_utc_timestamp(),
             "edge_detected_anomalies": anomalies,
             "full_sensor_data_at_trigger": sensor_data
@@ -141,41 +138,36 @@ class ArubaEdgeSimulator:
     def process_sensor_data(self, sensor_data: dict):
         """
         Main method to process incoming sensor data.
-        Detects anomalies, sends alerts to OpsRamp, and triggers PCAI.
+        Detects anomalies and sends alerts ONLY when a new anomaly is found.
         """
-        asset_id = sensor_data.get("assetId", "UnknownAsset") # Use 'assetId'
+        asset_id = sensor_data.get("assetId", "UnknownAsset")
         anomalies = self._detect_gross_anomalies(sensor_data)
 
-        # Corrected log statement with 'assetId' and 'timestamp'
         logger.info(f"[{self.device_id}] Processing data for {asset_id} at {sensor_data.get('timestamp', 'N/A')}")
 
+        # --- MODIFICATION START ---
+        # This logic is now simpler. It only acts if an anomaly is found
+        # and an alert is not already active for this session.
         if anomalies and not self.is_alert_active:
             self.is_alert_active = True
-            logger.warning(f"[{self.device_id}] Gross anomalies DETECTED on {asset_id}. Triggering alerts.")
+            logger.warning(f"[{self.device_id}] Gross anomalies DETECTED on {asset_id}. Triggering CRITICAL alert to OpsRamp.")
+            # Send the critical alert to OpsRamp
             self._send_event_to_opsramp(sensor_data, anomalies[0]) 
+            # Send the trigger to the PCAI agent for analysis
             self._send_trigger_to_pcai(sensor_data, anomalies)
 
+        # If there are no anomalies, we must reset the alert flag so it can fire again if needed.
         elif not anomalies and self.is_alert_active:
             self.is_alert_active = False
-            logger.info(f"[{self.device_id}] Anomaly cleared on {asset_id}. Notifying OpsRamp.")
-            if self.opsramp_connector:
-                self.opsramp_connector.send_pcai_log(
-                    asset_id=asset_id,
-                    log_level="INFO",
-                    message=f"Edge Event: Anomaly Condition Cleared on {asset_id}",
-                    details={"status": "Normal", "message": "Returning to normal operations."}
-                )
-
+            # The notification to OpsRamp about the clear condition has been removed as requested.
+            logger.info(f"[{self.device_id}] Anomaly cleared on {asset_id}. Resetting alert flag. No 'clear' event will be sent to OpsRamp.")
+        
         else:
-            status = "Anomalous" if self.is_alert_active else "Normal"
-            logger.info(f"[{self.device_id}] Data processed for {asset_id}. State: {status}")
-            if not self.is_alert_active and self.opsramp_connector:
-                self.opsramp_connector.send_pcai_log(
-                    asset_id=asset_id,
-                    log_level="INFO",
-                    message=f"Edge Event: Normal operation for {asset_id}",
-                    details=sensor_data
-                )
+            # During normal operation or an ongoing (already reported) anomaly, just log to the console.
+            status = "Anomalous (already reported)" if self.is_alert_active else "Normal"
+            logger.info(f"[{self.device_id}] Data processed for {asset_id}. State: {status}. No new event will be sent to OpsRamp.")
+        # --- MODIFICATION END ---
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO,
@@ -187,7 +179,6 @@ if __name__ == "__main__":
         exit(1)
 
     mqtt_cfg = config.get('mqtt', {})
-    # Use environment variables for broker host/port, fallback to config
     broker = os.environ.get("MQTT_BROKER_HOSTNAME", mqtt_cfg.get('host', 'localhost'))
     port = int(os.environ.get("MQTT_BROKER_PORT", mqtt_cfg.get('port', 1883)))
     topic = mqtt_cfg.get('sensor_topic', 'hpe/demo/default/sensors')
@@ -213,9 +204,9 @@ if __name__ == "__main__":
         except json.JSONDecodeError:
             logger.error(f"Invalid JSON received: {msg.payload}", exc_info=True)
         except Exception as ex:
-            logger.error(f"Error processing MQTT message: {ex}", exc_info=True) # Corrected print to logger.error
+            logger.error(f"Error processing MQTT message: {ex}", exc_info=True)
 
-    mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="aruba-edge-simulator") # Renamed client var
+    mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="aruba-edge-simulator")
     mqtt_client.on_connect = on_connect
     mqtt_client.on_message = on_message
 
@@ -226,7 +217,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logger.info("Simulator stopped by user (Ctrl+C).")
     except Exception as err:
-        logger.critical(f"Simulator experienced an unexpected error: {err}", exc_info=True) # Corrected print to logger.critical
+        logger.critical(f"Simulator experienced an unexpected error: {err}", exc_info=True)
     finally:
         mqtt_client.disconnect()
         logger.info("MQTT client disconnected.")

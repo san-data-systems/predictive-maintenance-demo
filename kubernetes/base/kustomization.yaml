@@ -34,6 +34,8 @@ resources:
   - postgres-deployment.yaml
   - postgres-service.yaml
   # ThingsBoard Application
+  - thingsboard-ui-deployment.yaml
+  - thingsboard-ui-service.yaml
   - thingsboard-deployment.yaml
   - thingsboard-service.yaml
   - thingsboard-virtualservice.yaml

@@ -1,8 +1,8 @@
 # kubernetes/base/thingsboard-virtualservice.yaml
-apiVersion: networking.istio.io/v1
+apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
 metadata:
-  name: thingsboard--vs
+  name: thingsboard-vs
 spec:
   gateways:
   - istio-system/ezaf-gateway
@@ -14,6 +14,7 @@ spec:
         prefix: /
     route:
     - destination:
-        host: thingsboard-service
+        # --- FIX: Changed host to point to the new UI service ---
+        host: thingsboard-ui-service
         port:
           number: 8080

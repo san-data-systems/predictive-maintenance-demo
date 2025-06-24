@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: iot-sensor-app
-        image: sdsajoshi/iot-sensor-app:v1 # IMPORTANT: Replace with your image
+        image: sdsajoshi/iot-sensor-app:latest # IMPORTANT: Replace with your image
         env:
         # Pass the MQTT Broker K8s service name
         - name: MQTT_BROKER_HOSTNAME

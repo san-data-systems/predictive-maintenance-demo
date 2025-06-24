@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: pcai-app
-        image: sdsajoshi/pcai-app:v3 # IMPORTANT: Replace with your built image tag
+        image: sdsajoshi/pcai-app:latest # IMPORTANT: Replace with your built image tag
         ports:
         - containerPort: 5000
         # --- ADD/MODIFY THIS SECTION FOR SELF-HEALING ---

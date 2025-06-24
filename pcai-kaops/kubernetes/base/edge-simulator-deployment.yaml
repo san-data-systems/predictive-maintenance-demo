@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: edge-simulator-app # Using the container name from your snippet
-        image: sdsajoshi/edge-simulator-app:v2 # IMPORTANT: Replace with your actual image tag
+        image: sdsajoshi/edge-simulator-app:latest # IMPORTANT: Replace with your actual image tag
         ports:
         - containerPort: 1883 # Assuming MQTT port is exposed
         env:

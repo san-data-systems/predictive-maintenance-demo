@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edge-simulator
+  labels:
+    app: edge-simulator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: edge-simulator
+  template:
+    metadata:
+      labels:
+        app: edge-simulator
+    spec:
+      containers:
+      - name: edge-simulator-app # Using the container name from your snippet
+        image: sdsajoshi/edge-simulator-app:v2 # IMPORTANT: Replace with your actual image tag
+        ports:
+        - containerPort: 1883 # Assuming MQTT port is exposed
+        env:
+        # Standard environment variables passed directly
+        - name: MQTT_BROKER_HOSTNAME
+          value: "mqtt-broker-service"
+        - name: PCAI_AGENT_TRIGGER_ENDPOINT
+          value: "http://pcai-app-service:5000/api/v1/analyze_trigger"
+        - name: MQTT_BROKER_PORT # Adding MQTT port explicitly as an env var
+          value: "1883" 
+
+        # Inject OpsRamp credentials from Kubernetes Secret
+        # This assumes you have a Secret named 'opsramp-credentials'
+        # containing keys like OPSRAMP_TENANT_ID, OPSRAMP_API_KEY, OPSRAMP_API_SECRET
+        envFrom:
+        - secretRef:
+            name: opsramp-credentials # Name of your Kubernetes Secret for OpsRamp credentials
+
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        
+        # Volume mounts for configuration (assuming these are needed and defined in 'volumes' section)
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config/demo_config.yaml # Mount the config file
+          subPath: demo_config.yaml # Mount only the specific file, not the whole directory
+      
+      # Volumes definition (ensure this section is also in your full YAML)
+      volumes:
+      - name: config-volume
+        configMap:
+          name: pcai-app-config # Name of your ConfigMap that contains demo_config.yaml
+          items:
+            - key: demo_config.yaml
+              path: demo_config.yaml # Specifies which item from ConfigMap to mount

@@ -1,0 +1,41 @@
+# kubernetes/base/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: discover2025
+
+labels:
+- includeSelectors: true
+  pairs:
+    app.kubernetes.io/name: pred-maint-demo
+    app.kubernetes.io/part-of: hpe-ai-demo
+
+resources:
+  - namespace.yaml
+  # MQTT Broker
+  - mqtt-broker-configmap.yaml
+  - mqtt-broker-deployment.yaml
+  - mqtt-broker-service.yaml
+  # IoT Sensor
+  - iot-sensor-deployment.yaml
+  # Edge Simulator
+  - edge-simulator-deployment.yaml
+  # PCAI App
+  - pcai-app-configmap.yaml
+  - pcai-app-deployment.yaml
+  - pcai-app-service.yaml
+  # Ollama
+  - ollama-pvc.yaml
+  - ollama-deployment.yaml
+  - ollama-service.yaml
+  # --- ADDED SECTION ---
+  # PostgreSQL Database for ThingsBoard
+  - postgres-pvc.yaml
+  - postgres-deployment.yaml
+  - postgres-service.yaml
+  # ThingsBoard Application
+  - thingsboard-ui-deployment.yaml
+  - thingsboard-ui-service.yaml
+  - thingsboard-deployment.yaml
+  - thingsboard-service.yaml
+  - thingsboard-virtualservice.yaml

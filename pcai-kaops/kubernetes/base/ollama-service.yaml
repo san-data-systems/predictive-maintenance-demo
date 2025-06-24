@@ -1,0 +1,13 @@
+# kubernetes/base/ollama-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-service
+spec:
+  selector:
+    app: ollama
+  ports:
+  - protocol: TCP
+    port: 11434       # The port the service will listen on
+    targetPort: 11434   # The port inside the Ollama container
+  type: ClusterIP # Only accessible from within the cluster

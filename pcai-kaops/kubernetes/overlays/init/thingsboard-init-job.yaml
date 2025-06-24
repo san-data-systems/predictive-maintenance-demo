@@ -1,0 +1,26 @@
+# kubernetes/base/thingsboard-init-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: thingsboard-init-db
+spec:
+  template:
+    spec:
+      containers:
+      - name: tb-init-container
+        image: thingsboard/tb-node:4.0.1.1
+        env:
+        # Environment variables to connect to the database
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:postgresql://postgres-service:5432/thingsboard"
+        - name: SPRING_DATASOURCE_USERNAME
+          value: "postgres"
+        - name: SPRING_DATASOURCE_PASSWORD
+          value: "postgres"
+        # Special variables to trigger the database schema installation
+        - name: INSTALL_TB
+          value: "true"
+        - name: LOAD_DEMO
+          value: "true" # This will load some helpful demo data and assets
+      restartPolicy: Never
+  backoffLimit: 2 # Number of retries before the job is marked as failed

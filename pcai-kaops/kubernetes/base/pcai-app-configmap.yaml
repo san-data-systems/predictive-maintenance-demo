@@ -1,0 +1,160 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pcai-app-config
+  # The namespace will be applied by the 'kustomization.yaml' file
+data:
+  # Key 1: The main configuration file for the entire application.
+  demo_config.yaml: |
+    # ----------------------------------------------------------------------
+    # Configuration for the AI-Driven Predictive Maintenance Demo (for K8s)
+    # ----------------------------------------------------------------------
+    company_name_short: "DemoCorpK8s"
+
+    # --- MQTT Broker Settings (for K8s) ---
+    mqtt:
+      host: "mqtt-broker-service" # Default for local runs, overridden by MQTT_BROKER_HOSTNAME env var in K8s
+      port: 1883        # Default for local runs, overridden by MQTT_BROKER_PORT env var in K8s
+      sensor_topic: "hpe/demo/turbine/007/sensors" # The topic for sensor data
+
+    # --- ThingsBoard Settings (for K8s) ---
+    thingsboard:
+      host: "thingsboard-service" # Kubernetes service name for ThingsBoard
+      port: 1883                # Default MQTT port exposed by the ThingsBoard service
+      # IMPORTANT: You MUST replace this placeholder with the real access token
+      # from your ThingsBoard device.
+      device_token: "CUERwArB1eejin2CZmbT" # Corrected key name
+
+    # --- IoT Sensor Simulator Settings ---
+    iot_sensor_simulator:
+      asset_id_prefix: "{company_name_short}_Turbine" # Corrected key name
+      default_asset_number: 007
+      
+      # Timing and probability for the anomaly cycle (ADJUSTED FOR VERY SHORT DEMO CYCLE)
+      data_interval_seconds: 2
+      initial_normal_ticks: 3
+      anomaly_ramp_duration_ticks: 4
+      hold_duration_ticks: 5
+      anomaly_start_chance: 0.15
+
+      # Normal operating ranges for the sensor metrics
+      vibration_normal_range: [0.1, 0.5]
+      acoustic_normal_range: [20.0, 35.0]
+      base_temp_c: 42.0
+
+      # Normal Jitter Settings (Gaussian noise for natural fluctuations)
+      normal_jitter_std_dev_vib: 0.02
+      normal_jitter_std_dev_temp: 0.2
+      normal_jitter_std_dev_acou: 0.5
+
+      # Common influence factor for normal jitter (for subtle correlation between metrics)
+      common_normal_jitter_std_dev: 0.005
+      common_normal_jitter_influence_scale_vib: 1.0
+      common_normal_jitter_influence_scale_temp: 10.0
+      common_normal_jitter_influence_scale_acou: 5.0
+
+      # Anomaly factors/thresholds (how much the metrics deviate during an anomaly peak)
+      anomaly_vibration_factor: 5.0
+      temperature_critical_c_increase: 15.0
+      acoustic_anomaly_factor: 1.5
+
+      # Multiplier for jitter during anomaly phases (makes data look more chaotic during failure)
+      anomaly_jitter_factor: 2.0
+
+      # Specific anomaly frequencies for vibration (decoupled from amplitude).
+      anomaly_dominant_frequency_hz: 121.0
+      anomaly_signature_frequency_hz: 121.38
+
+    # --- Aruba Edge Simulator Settings (for K8s) ---
+    aruba_edge_simulator:
+      device_id_template: "Edge_Sim_{company_name_short}_Node{id:03d}"
+      default_device_id_num: 1
+      pcai_agent_trigger_endpoint: "http://localhost:5000/api/v1/analyze_trigger" # Overridden by env var in K8s
+      thresholds:
+        temperature_critical_c: 55.0
+        vibration_amplitude_gross_g: 1.5 # Corrected key name
+        # acoustic_critical_band_db: 70.0 # Removed: Not used in edge detection logic
+      # The opsramp section under aruba_edge_simulator is removed as it's redundant.
+      # ArubaEdgeSimulator uses the main pcai_app.opsramp config.
+
+    # --- PCAI Agent Application Settings (for K8s) ---
+    pcai_app:
+      agent_id_prefix_template: "PCAI_Agent_{company_name_short}"
+      listen_host: "0.0.0.0"
+      listen_port: 5000
+      knowledge_base_path: "/app/knowledge_base_files" # Path inside the container (volume mount)
+      
+      llm_config:
+        provider: "ollama"
+        ollama:
+          model_name: "llama3:8b"
+          api_base_url: "http://ollama-service:11434" # Kubernetes service name for Ollama
+          request_timeout_seconds: 180
+
+      opsramp:
+        env_var_tenant_id: "OPSRAMP_TENANT_ID" # Environment variable name for tenant ID
+        env_var_api_key: "OPSRAMP_API_KEY"     # Environment variable name for API key
+        env_var_api_secret: "OPSRAMP_API_SECRET" # Environment variable name for API secret
+        api_hostname: "hpekaops.api.pov.opsramp.com"
+        token_endpoint_path: "/tenancy/auth/oauth/token"
+        alert_endpoint_path: "/api/v2/tenants/{tenantId}/alerts" # Corrected path for OpsRamp alerts
+        turbine_resource_id: "957836fe-7986-46da-bc28-b5d5cca08c85" # REPLACE WITH YOUR OPSRAMP RESOURCE ID
+
+      servicenow:
+        instance_hostname: "dev194183.service-now.com" # REPLACE WITH YOUR SERVICENOW INSTANCE HOSTNAME
+        env_var_api_user: "SERVICENOW_API_USER"       # Environment variable name for API user
+        env_var_api_password: "SERVICENOW_API_PASSWORD" # Environment variable name for API password
+        target_table: "incident"
+        default_assignment_group: "Mechanical Maintenance Team"
+        custom_fields:
+          source_system: "u_source_system"
+          ai_diagnosis_confidence: "u_ai_diagnosis_confidence"
+          ai_reasoning: "u_ai_reasoning"
+          recommended_actions: "u_ai_recommended_actions"
+          required_parts: "u_ai_required_parts"
+
+      diagnosis:
+        confidence_threshold_for_action: 0.70
+
+  # Key 2: The technical manual knowledge base file (embedded for ConfigMap)
+  technical_manual_extracts.txt: |
+    Wind Turbine Generator - Model GRX-II - Operations & Maintenance Manual
+
+    Document Version: 4.7.2
+    Last Updated: 2024-01-15
+    Manufacturer: AeroGen Dynamics Ltd.
+
+    Chapter 7: Troubleshooting Common Faults
+    7.2. Generator Overheating
+    Continuous operation above nominal temperature (85°C internal winding) can degrade insulation and reduce generator lifespan. Verify cooling system functionality.
+
+    7.3. Vibration Analysis and Fault Signatures
+    The GRX-II is equipped with multiple vibration sensors. Section 7.3: High-frequency vibrations (115-125Hz) with harmonic sidebands often indicate early-stage gear tooth pitting. This is particularly relevant for auxiliary systems.
+
+  # Key 3: The repair history knowledge base file (embedded for ConfigMap)
+  turbine_repair_history_logs.txt: |
+    Turbine Maintenance & Repair Log - Master Record
+
+    Asset ID: DemoCorp_Turbine_004 (identical model to DemoCorp_Turbine_007)
+    Date: 2024-03-03
+    Work Order: WO2024030002
+    Issue: Critical vibration and increasing temperature at rear generator bearing. Turbine taken offline. Similar acoustic signature at 120Hz recorded 3 weeks prior to P/N G-5432 bearing assembly failure.
+    Action: Found catastrophic failure of bearing P/N G-5432. Replaced bearing assembly.
+    Notes: Recommend reviewing vibration thresholds for 120Hz band on similar GRX-II units.
+
+    Asset ID: DemoCorp_Turbine_007
+    Date: 2024-08-01
+    Work Order: WO2024080005
+    Issue: Annual main bearing lubrication. Action: Nominal.
+
+  # Key 4: The expert notes knowledge base file (embedded for ConfigMap)
+  expert_technician_notes.txt: |
+    Expert Technician Field Notes & Best Practices - Compiled by Lead Engineering Team
+    Lead Engineer: Dr. Eva Rostova
+
+    GRX-II Model Specific Notes:
+    1. Main Bearing Wear: The GRX-II main bearing is generally robust. Look for an increase in low-frequency (1-10Hz) vibration components.
+
+    2. Direct-Drive Generator Nuances: Analyst Note (Dr. Eva Rostova): For gearbox model GRX-II, correlate 120Hz vibration spikes with oil temperature. A rise >5°C suggests accelerated wear. The core part is the 120Hz + temp correlation.
+
+    3. Acoustic Signatures: Experienced technicians can often identify developing issues by changes in the turbine's sound.

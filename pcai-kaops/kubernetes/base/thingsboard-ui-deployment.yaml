@@ -1,0 +1,37 @@
+# kubernetes/base/thingsboard-ui-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: thingsboard-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: thingsboard-ui
+  template:
+    metadata:
+      labels:
+        app: thingsboard-ui
+    spec:
+      # --- Add this section ---
+      imagePullSecrets:
+      - name: dockerhub-creds # This must match the name of the secret you created
+      # ------------------------
+      containers:
+      - name: thingsboard-ui
+        image: devsds/thingsboard-ui:latest # The custom UI image
+        ports:
+        - containerPort: 8080
+        env:
+        # These variables tell the UI how to connect to the backend ThingsBoard service
+        - name: THINGSBOARD_SERVICE_HOST
+          value: "thingsboard-service" # This is the name of the K8s service for the backend
+        - name: THINGSBOARD_SERVICE_PORT
+          value: "8080" # The HTTP port of the backend service
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"

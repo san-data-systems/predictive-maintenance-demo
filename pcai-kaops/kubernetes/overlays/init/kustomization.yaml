@@ -1,0 +1,13 @@
+# kubernetes/overlays/init/kustomization.yaml
+# This overlay includes all base resources plus the one-time database setup job.
+# Apply this overlay ONLY ONCE for the very first installation.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Inherit all resources from the base configuration
+resources:
+- ../../base
+
+# Add the database initialization job as an additional resource for this overlay
+- thingsboard-init-job.yaml

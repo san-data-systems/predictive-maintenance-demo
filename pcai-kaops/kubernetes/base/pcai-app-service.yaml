@@ -1,0 +1,13 @@
+# kubernetes/base/pcai-app-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: pcai-app-service
+spec:
+  selector:
+    app: pcai-app
+  ports:
+  - protocol: TCP
+    port: 5000       # Service port
+    targetPort: 5000   # Flask app container port
+  type: ClusterIP # Internal service

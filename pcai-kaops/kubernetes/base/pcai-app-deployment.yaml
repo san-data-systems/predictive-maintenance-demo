@@ -16,9 +16,26 @@ spec:
     spec:
       containers:
       - name: pcai-app
-        image: sdsajoshi/pcai-app:v2 # IMPORTANT: Replace with your built image tag
+        image: sdsajoshi/pcai-app:v3 # IMPORTANT: Replace with your built image tag
         ports:
         - containerPort: 5000
+        # --- ADD/MODIFY THIS SECTION FOR SELF-HEALING ---
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 5000
+          initialDelaySeconds: 20 # Time to wait before first probe
+          periodSeconds: 10       # Probe every 10 seconds
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 5000
+          initialDelaySeconds: 60 # Start liveness checks after 1 minute
+          periodSeconds: 20       # Probe every 20 seconds
+          failureThreshold: 3     # Restart pod after 3 consecutive failures
+          timeoutSeconds: 5
+        # --- END OF PROBE SECTION ---
         resources:
           requests:
             cpu: "250m"

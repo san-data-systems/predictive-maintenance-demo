@@ -1,4 +1,4 @@
-# pcai_app/api_connector.py
+# utilities/api_connector.py
 
 import json
 import os
@@ -9,6 +9,7 @@ from urllib3.util.retry import Retry
 import ollama
 import logging
 import time
+import uuid
 
 from utilities import get_utc_timestamp
 
@@ -22,12 +23,10 @@ class OpsRampConnector:
     def __init__(self, opsramp_config: dict, pcai_agent_id: str):
         self.pcai_agent_id = pcai_agent_id
         
-        # Get credentials from environment variables, using names from config
         self.tenant_id = os.environ.get(opsramp_config.get("env_var_tenant_id"))
         self.api_key = os.environ.get(opsramp_config.get("env_var_api_key"))
         self.api_secret = os.environ.get(opsramp_config.get("env_var_api_secret"))
         
-        # Get URL components from config
         self.api_hostname = opsramp_config.get("api_hostname")
         self.token_path = opsramp_config.get("token_endpoint_path")
         self.alert_path_template = opsramp_config.get("alert_endpoint_path")
@@ -74,39 +73,46 @@ class OpsRampConnector:
     def send_pcai_log(self, asset_id: str, log_level: str, message: str, details: dict = None):
         """
         Formats and sends a log/event as an Alert to OpsRamp.
-        Puts all details directly into the description in human-readable form.
-        Includes a retry mechanism for token-related failures.
+        Includes a retry mechanism and adds a unique ID to the subject to prevent de-duplication.
         """
         if not self.alert_url:
             logger.warning("OpsRamp alert URL not configured. Cannot send alert.")
             return {"status": "error", "message": "Configuration error"}
 
-        # Retry loop for authentication/proxy issues
         for attempt in range(2):
             if not self.access_token:
                 logger.warning(f"OpsRamp access token missing. Attempting to acquire (Attempt {attempt + 1}/2)...")
                 if not self.get_access_token():
                     logger.error("Failed to refresh OpsRamp token. Aborting send.")
-                    # Don't continue loop if we can't even get a token
                     return {"status": "error", "message": "Authentication failed"}
 
             log_level_upper = log_level.upper()
             priority_map = {"CRITICAL": "P1", "ERROR": "P2", "WARN": "P3", "INFO": "P5", "SUCCESS": "P5"}
             state_map = {"CRITICAL": "CRITICAL", "ERROR": "CRITICAL", "WARN": "WARNING", "INFO": "OK", "SUCCESS": "OK"}
             current_state = state_map.get(log_level_upper, "OK")
-            subject = f"AI Agent Log ({current_state}): {message[:120]} - {get_utc_timestamp()}"
             description_lines = [f"{message}", "", "Details:"]
             if details:
                 for key, value in details.items():
                     value_str = json.dumps(value) if isinstance(value, (dict, list)) else str(value)
                     description_lines.append(f"- {key}: {value_str}")
             description = "\n".join(description_lines)
+            
+            # --- START OF FIX ---
+            # Generate a short unique ID to prepend to the subject line.
+            # This is the most reliable way to prevent alert de-duplication.
+            short_unique_id = str(uuid.uuid4()).split('-')[0]
+            subject = f"[{short_unique_id}] AI Agent Log ({current_state}): {message[:110]}"
+            # --- END OF FIX ---
 
             alert_object = {
-                "subject": subject, "currentState": current_state,
-                "priority": priority_map.get(log_level_upper, "P5"), "description": description,
-                "customFields": [], "device": {"resourceUUID": self.turbine_resource_id},
-                "app": "Custom", "serviceName": asset_id
+                "subject": subject,
+                "currentState": current_state,
+                "priority": priority_map.get(log_level_upper, "P5"),
+                "description": description,
+                "customFields": [], # Custom fields are not needed for this fix
+                "device": {"resourceUUID": self.turbine_resource_id},
+                "app": "Custom",
+                "serviceName": asset_id
             }
             payload = [alert_object]
             headers = {"Authorization": f"Bearer {self.access_token}", "Content-Type": "application/json", "Accept": "application/json"}
@@ -116,14 +122,13 @@ class OpsRampConnector:
                 response = requests.post(self.alert_url, headers=headers, json=payload, timeout=20)
                 response.raise_for_status()
                 logger.info(f"Successfully sent alert to OpsRamp. Status: {response.status_code}")
-                return {"status": "success"} # Exit on success
+                return {"status": "success"}
             except requests.exceptions.HTTPError as e:
                 logger.error(f"Error sending alert to OpsRamp. Status: {e.response.status_code}, Body: {e.response.text[:500]}", exc_info=False)
-                # If it's an auth or proxy error, invalidate the token and retry the loop
                 if e.response.status_code in [401, 403, 407]:
                     logger.warning(f"Auth/Proxy error ({e.response.status_code}) detected. Invalidating token and retrying...")
                     self.access_token = None
-                    continue # This will cause the next iteration of the for loop
+                    continue
                 else:
                     return {"status": "error", "message": f"HTTP Error: {e.response.status_code}"}
             except requests.exceptions.RequestException as e:
@@ -135,10 +140,6 @@ class OpsRampConnector:
 
 
 class ServiceNowConnector:
-    """
-    Connects to ServiceNow to create incidents.
-    Uses a requests.Session with a retry strategy for robustness.
-    """
     def __init__(self, servicenow_config: dict):
         self.instance_hostname = servicenow_config.get("instance_hostname")
         if not self.instance_hostname or "YOUR_INSTANCE_HOSTNAME" in self.instance_hostname:
@@ -156,13 +157,11 @@ class ServiceNowConnector:
         self.api_base_url = f"https://{self.instance_hostname}/api/now/table/{self.target_table}"
         self.custom_fields_map = servicenow_config.get("custom_fields", {})
         
-        # --- NEW: Setup requests.Session with Retry ---
         self.session = requests.Session()
         retries = Retry(
-            total=3,          # Total number of retries
-            backoff_factor=1, # Wait 1s, 2s, 4s between retries
-            status_forcelist=[500, 502, 503, 504], # Retry on these server errors
-            allowed_methods={"POST"} # Retry on POST requests
+            total=3, backoff_factor=1, 
+            status_forcelist=[500, 502, 503, 504],
+            allowed_methods={"POST"}
         )
         self.session.mount('https://', HTTPAdapter(max_retries=retries))
         self.session.auth = HTTPBasicAuth(self.api_user, self.api_password)
@@ -185,7 +184,6 @@ class ServiceNowConnector:
         
         logger.info(f"Attempting to create ticket in ServiceNow: {short_description[:60]}...");
         try:
-            # --- MODIFIED: Use session object and increased timeout ---
             response = self.session.post(self.api_base_url, json=payload, timeout=60)
             logger.info(f"ServiceNow API raw response status: {response.status_code}");
             response.raise_for_status()
@@ -204,10 +202,6 @@ class ServiceNowConnector:
 
 
 class OllamaConnector:
-    """
-    Connects to an Ollama server to perform LLM-based diagnosis.
-    Includes a retry mechanism to handle slow-starting dependencies.
-    """
     def __init__(self, ollama_config: dict):
         self.model_name = ollama_config.get("model_name", "llama3:8b")
         self.api_base_url = ollama_config.get("api_base_url", "http://localhost:11434")
@@ -219,10 +213,6 @@ class OllamaConnector:
         logger.info(f"OllamaConnector configured for model '{self.model_name}'. Connection will be established on first use.")
 
     def _get_client(self):
-        """
-        Gets a connected Ollama client, retrying if necessary.
-        This makes the connection lazy and resilient.
-        """
         if self.client:
             try:
                 self.client.list()

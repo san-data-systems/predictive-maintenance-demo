@@ -201,6 +201,13 @@ def analyze_trigger():
     app.logger.info("--- Sent 202 Accepted: AI analysis started in background ---")
     return jsonify({"status": "accepted", "message": "AI analysis has been started in the background."}), 202
 
+@app.route('/healthz', methods=['GET'])
+def health_check():
+    """Simple health check endpoint for Kubernetes Liveness/Readiness Probes."""
+    # A more advanced check could verify connections to downstream services.
+    # For now, returning 200 OK if the app is running is a good start.
+    return jsonify({"status": "healthy"}), 200
+
 @app.errorhandler(Exception) 
 def handle_flask_error(e):
     app.logger.error(f"Unhandled Flask application error: {e}", exc_info=True)

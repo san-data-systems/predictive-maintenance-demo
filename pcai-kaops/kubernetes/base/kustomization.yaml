@@ -11,7 +11,7 @@ labels:
     app.kubernetes.io/part-of: hpe-ai-demo
 
 resources:
-  - namespace.yaml
+  # - namespace.yaml
   # MQTT Broker
   - mqtt-broker-configmap.yaml
   - mqtt-broker-deployment.yaml

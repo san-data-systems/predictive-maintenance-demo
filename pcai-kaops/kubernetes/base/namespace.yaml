@@ -1,6 +1,6 @@
 # kubernetes/base/namespace.yaml
 # Defines the dedicated namespace for our predictive maintenance demo application.
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: pred-maint-demo
+# apiVersion: v1
+# kind: Namespace
+# metadata:
+#   name: pred-maint-demo

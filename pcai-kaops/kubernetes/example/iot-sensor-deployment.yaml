@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iot-sensor
+  labels:
+    app: iot-sensor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iot-sensor
+  template:
+    metadata:
+      labels:
+        app: iot-sensor
+    spec:
+      containers:
+      - name: iot-sensor-app
+        image: sdsajoshi/iot-sensor-app:latest # IMPORTANT: Replace with your image
+        env:
+        # Pass the MQTT Broker K8s service name
+        - name: MQTT_BROKER_HOSTNAME
+          value: "mqtt-broker-service"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "250m"
+            memory: "256Mi"
+        # --- ADDED SECTION ---
+        # Mount the shared ConfigMap to read the demo_config.yaml file
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config
+      volumes:
+      - name: config-volume
+        configMap:
+          name: pcai-app-config
+          items:
+            - key: demo_config.yaml
+              path: demo_config.yaml
